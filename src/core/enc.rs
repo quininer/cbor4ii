@@ -1,7 +1,10 @@
 use crate::core::types::{ self, big };
 
 
+#[non_exhaustive]
 pub enum Error<E> {
+    #[cfg(feature = "serde1")]
+    Any(String),
     Write(E)
 }
 
@@ -11,31 +14,51 @@ impl<E> From<E> for Error<E> {
     }
 }
 
+#[cfg(feature = "serde1")]
+impl<E: std::error::Error + 'static> serde::ser::Error for Error<E> {
+    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+        Error::Any(msg.to_string())
+    }
+}
+
+#[cfg(not(feature = "no_std"))]
 impl<E: std::error::Error + 'static> std::error::Error for Error<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            #[cfg(feature = "serde1")]
+            Error::Any(_) => None,
             Error::Write(err) => Some(err)
         }
     }
 }
 
+#[cfg(not(feature = "no_std"))]
 impl<E: std::error::Error> std::fmt::Debug for Error<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            #[cfg(feature = "serde1")]
+            Error::Any(msg) => std::fmt::Debug::fmt(msg, f),
             Error::Write(err) => std::fmt::Debug::fmt(err, f)
         }
     }
 }
 
+#[cfg(not(feature = "no_std"))]
 impl<E: std::error::Error> std::fmt::Display for Error<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            #[cfg(feature = "serde1")]
+            Error::Any(msg) => std::fmt::Display::fmt(msg, f),
             Error::Write(err) => std::fmt::Display::fmt(err, f)
         }
     }
 }
 
 pub trait Write {
+    #[cfg(not(feature = "no_std"))]
+    type Error: std::error::Error + 'static;
+
+    #[cfg(feature = "no_std")]
     type Error;
 
     fn push(&mut self, input: &[u8]) -> Result<(), Self::Error>;
@@ -105,7 +128,7 @@ impl Encode for TypeNum<u32> {
 impl Encode for TypeNum<u64> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         match u32::try_from(self.value) {
-            Ok(x) =>TypeNum::new(self.type_, x).encode(writer)?,
+            Ok(x) => TypeNum::new(self.type_, x).encode(writer)?,
             Err(_) => {
                 let [x0, x1, x2, x3, x4, x5, x6, x7] = self.value.to_be_bytes();
                 writer.push(&[self.type_ | 0x1b, x0, x1, x2, x3, x4, x5, x6, x7])?;
@@ -127,6 +150,18 @@ macro_rules! encode_ux {
     }
 }
 
+macro_rules! encode_nx {
+    ( $( $t:ty ),* ) => {
+        $(
+            impl Encode for types::Negative<$t> {
+                fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+                    TypeNum::new(tag::NEGATIVE, self.0 - 1).encode(writer)
+                }
+            }
+        )*
+    }
+}
+
 macro_rules! encode_ix {
     ( $( $t:ty = $t2:ty );* ) => {
         $(
@@ -135,7 +170,7 @@ macro_rules! encode_ix {
                     let x = *self;
                     match <$t2>::try_from(x) {
                         Ok(x) => x.encode(writer),
-                        Err(_) => TypeNum::new(tag::NEGATIVE, (-1 - x) as $t2).encode(writer)
+                        Err(_) => types::Negative(-x as $t2).encode(writer)
                     }
                 }
             }
@@ -144,6 +179,7 @@ macro_rules! encode_ix {
 }
 
 encode_ux!(u8, u16, u32, u64);
+encode_nx!(u8, u16, u32, u64);
 encode_ix!(
     i8 = u8;
     i16 = u16;
@@ -151,9 +187,7 @@ encode_ix!(
     i64 = u64
 );
 
-pub struct Bytes<'a>(&'a [u8]);
-
-impl Encode for Bytes<'_> {
+impl Encode for types::Bytes<&'_ [u8]> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         TypeNum::new(tag::BYTES, self.0.len() as u64).encode(writer)?;
         writer.push(self.0)?;
@@ -178,14 +212,20 @@ impl Encode for &'_ str {
     }
 }
 
+impl Encode for types::BadStr<&'_ [u8]> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        TypeNum::new(tag::STRING, self.0.len() as u64).encode(writer)?;
+        writer.push(self.0)?;
+        Ok(())
+    }
+}
+
+
 #[cfg(feature = "bstr")]
 impl Encode for &'_ bstr::BStr {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        TypeNum::new(tag::STRING, self.len() as u64).encode(writer)?;
-        writer.push(self.as_ref())?;
-        Ok(())
+        types::BadStr(self.as_ref()).encode(writer)
     }
-
 }
 
 pub struct StrStart;
@@ -199,7 +239,7 @@ impl Encode for StrStart {
 
 impl<T: Encode> Encode for &'_ [T] {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        TypeNum::new(tag::ARRAY, self.len() as u64).encode(writer)?;
+        ArrayStartBounded(self.len()).encode(writer)?;
         for value in self.iter() {
             value.encode(writer)?;
         }
@@ -207,9 +247,17 @@ impl<T: Encode> Encode for &'_ [T] {
     }
 }
 
-pub struct ArrayStart;
+pub struct ArrayStartBounded(pub usize);
+pub struct ArrayStartUnbounded;
 
-impl Encode for ArrayStart {
+impl Encode for ArrayStartBounded {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        TypeNum::new(tag::ARRAY, self.0 as u64).encode(writer)?;
+        Ok(())
+    }
+}
+
+impl Encode for ArrayStartUnbounded {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         writer.push(&[0x9f])?;
         Ok(())
@@ -220,7 +268,7 @@ pub struct Map<'a, K, V>(&'a [(K, V)]);
 
 impl<K: Encode, V: Encode> Encode for Map<'_, K, V> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        TypeNum::new(tag::MAP, self.0.len() as u64).encode(writer)?;
+        MapStartBounded(self.0.len()).encode(writer)?;
         for (k, v) in self.0.iter() {
             k.encode(writer)?;
             v.encode(writer)?;
@@ -229,9 +277,17 @@ impl<K: Encode, V: Encode> Encode for Map<'_, K, V> {
     }
 }
 
-pub struct MapStart;
+pub struct MapStartBounded(pub usize);
+pub struct MapStartUnbounded;
 
-impl Encode for MapStart {
+impl Encode for MapStartBounded {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        TypeNum::new(tag::MAP, self.0 as u64).encode(writer)?;
+        Ok(())
+    }
+}
+
+impl Encode for MapStartUnbounded {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         writer.push(&[0xbf])?;
         Ok(())
@@ -241,9 +297,19 @@ impl Encode for MapStart {
 impl Encode for big::Num {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         writer.push(&[0xc2])?;
+        types::Bytes(self.0.as_slice()).encode(writer)
+    }
+}
+
+/*
+impl Encode for types::Negative<big::Num> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        let num = self.0 - 1;
+        writer.push(&[0xc3])?;
         Bytes(self.0.as_slice()).encode(writer)
     }
 }
+*/
 
 impl Encode for types::Simple {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
@@ -313,6 +379,7 @@ impl Encode for End {
 
 // from https://www.rfc-editor.org/rfc/rfc8949.html#name-examples-of-encoded-cbor-da
 #[test]
+#[cfg(not(feature = "no_std"))]
 fn test_encoded() -> anyhow::Result<()> {
     pub struct Buffer(Vec<u8>);
 
@@ -371,8 +438,8 @@ fn test_encoded() -> anyhow::Result<()> {
         // TODO bignum
         // 18446744073709551616, "0xc249010000000000000000";
 
-        // TODO i64 overflow
-        // -18446744073709551616i64, "0x3bffffffffffffffff";
+        // TODO u64 overflow
+        // -18446744073709551616u128, "0x3bffffffffffffffff";
 
         // TODO bignum
         // -18446744073709551617, "0xc349010000000000000000";
@@ -415,8 +482,8 @@ fn test_encoded() -> anyhow::Result<()> {
 
         // TODO tag
 
-        Bytes(&[0u8; 0]), "0x40";
-        Bytes(&[0x01, 0x02, 0x03, 0x04]), "0x4401020304";
+        types::Bytes(&[0u8; 0][..]), "0x40";
+        types::Bytes(&[0x01, 0x02, 0x03, 0x04][..]), "0x4401020304";
 
         "", "0x60";
         "a", "0x6161";

@@ -3,3 +3,6 @@
 extern crate alloc;
 
 mod core;
+
+#[cfg(feature = "serde1")]
+pub mod serde;
