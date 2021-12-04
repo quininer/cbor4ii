@@ -1,10 +1,11 @@
-use crate::core::types::{ self, big };
+use core::fmt;
+use crate::core::types;
 
 
 #[non_exhaustive]
 pub enum Error<E> {
     #[cfg(feature = "serde1")]
-    Any(String),
+    Any(alloc::string::String),
     Write(E)
 }
 
@@ -15,13 +16,24 @@ impl<E> From<E> for Error<E> {
 }
 
 #[cfg(feature = "serde1")]
+#[cfg(feature = "use_std")]
 impl<E: std::error::Error + 'static> serde::ser::Error for Error<E> {
-    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
         Error::Any(msg.to_string())
     }
 }
 
-#[cfg(not(feature = "no_std"))]
+#[cfg(feature = "serde1")]
+#[cfg(not(feature = "use_std"))]
+impl<E: fmt::Display + fmt::Debug> serde::ser::Error for Error<E> {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        use crate::alloc::string::ToString;
+
+        Error::Any(msg.to_string())
+    }
+}
+
+#[cfg(feature = "use_std")]
 impl<E: std::error::Error + 'static> std::error::Error for Error<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -32,34 +44,32 @@ impl<E: std::error::Error + 'static> std::error::Error for Error<E> {
     }
 }
 
-#[cfg(not(feature = "no_std"))]
-impl<E: std::error::Error> std::fmt::Debug for Error<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<E: fmt::Debug> fmt::Debug for Error<E> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             #[cfg(feature = "serde1")]
-            Error::Any(msg) => std::fmt::Debug::fmt(msg, f),
-            Error::Write(err) => std::fmt::Debug::fmt(err, f)
+            Error::Any(msg) => fmt::Debug::fmt(msg, f),
+            Error::Write(err) => fmt::Debug::fmt(err, f)
         }
     }
 }
 
-#[cfg(not(feature = "no_std"))]
-impl<E: std::error::Error> std::fmt::Display for Error<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<E: fmt::Display> fmt::Display for Error<E> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             #[cfg(feature = "serde1")]
-            Error::Any(msg) => std::fmt::Display::fmt(msg, f),
-            Error::Write(err) => std::fmt::Display::fmt(err, f)
+            Error::Any(msg) => fmt::Display::fmt(msg, f),
+            Error::Write(err) => fmt::Display::fmt(err, f)
         }
     }
 }
 
 pub trait Write {
-    #[cfg(not(feature = "no_std"))]
+    #[cfg(feature = "use_std")]
     type Error: std::error::Error + 'static;
 
-    #[cfg(feature = "no_std")]
-    type Error;
+    #[cfg(not(feature = "use_std"))]
+    type Error: fmt::Display + fmt::Debug;
 
     fn push(&mut self, input: &[u8]) -> Result<(), Self::Error>;
 }
@@ -155,7 +165,7 @@ macro_rules! encode_nx {
         $(
             impl Encode for types::Negative<$t> {
                 fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-                    TypeNum::new(tag::NEGATIVE, self.0 - 1).encode(writer)
+                    TypeNum::new(tag::NEGATIVE, self.0).encode(writer)
                 }
             }
         )*
@@ -170,7 +180,7 @@ macro_rules! encode_ix {
                     let x = *self;
                     match <$t2>::try_from(x) {
                         Ok(x) => x.encode(writer),
-                        Err(_) => types::Negative(-x as $t2).encode(writer)
+                        Err(_) => types::Negative((-1 - x) as $t2).encode(writer)
                     }
                 }
             }
@@ -219,7 +229,6 @@ impl Encode for types::BadStr<&'_ [u8]> {
         Ok(())
     }
 }
-
 
 #[cfg(feature = "bstr")]
 impl Encode for &'_ bstr::BStr {
@@ -294,22 +303,12 @@ impl Encode for MapStartUnbounded {
     }
 }
 
-impl Encode for big::Num {
+impl<T: Encode> Encode for types::Tag<T> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[0xc2])?;
-        types::Bytes(self.0.as_slice()).encode(writer)
+        writer.push(&[self.0])?;
+        self.1.encode(writer)
     }
 }
-
-/*
-impl Encode for types::Negative<big::Num> {
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        let num = self.0 - 1;
-        writer.push(&[0xc3])?;
-        Bytes(self.0.as_slice()).encode(writer)
-    }
-}
-*/
 
 impl Encode for types::Simple {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
@@ -344,9 +343,18 @@ impl Encode for types::Undefined {
     }
 }
 
+#[cfg(feature = "half-f16")]
 impl Encode for half::f16 {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         let [x0, x1] = self.to_be_bytes();
+        writer.push(&[0xf9, x0, x1])?;
+        Ok(())
+    }
+}
+
+impl Encode for types::F16 {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        let [x0, x1] = self.0.to_be_bytes();
         writer.push(&[0xf9, x0, x1])?;
         Ok(())
     }
@@ -379,7 +387,7 @@ impl Encode for End {
 
 // from https://www.rfc-editor.org/rfc/rfc8949.html#name-examples-of-encoded-cbor-da
 #[test]
-#[cfg(not(feature = "no_std"))]
+#[cfg(feature = "use_std")]
 fn test_encoded() -> anyhow::Result<()> {
     pub struct Buffer(Vec<u8>);
 
@@ -439,7 +447,7 @@ fn test_encoded() -> anyhow::Result<()> {
         // 18446744073709551616, "0xc249010000000000000000";
 
         // TODO u64 overflow
-        // -18446744073709551616u128, "0x3bffffffffffffffff";
+        types::Negative((-18446744073709551616i128 - 1) as u64), "0x3bffffffffffffffff";
 
         // TODO bignum
         // -18446744073709551617, "0xc349010000000000000000";

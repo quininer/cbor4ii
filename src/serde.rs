@@ -1,30 +1,36 @@
 pub mod ser;
 
-use std::io;
-use serde::Serialize;
+#[cfg(feature = "use_std")]
+mod io_writer {
+    use std::io;
+    use serde::Serialize;
+    use super::ser;
 
-struct IoWrite<W>(W);
+    struct IoWrite<W>(W);
 
-impl<W: io::Write> crate::core::enc::Write for IoWrite<W> {
-    type Error = io::Error;
+    impl<W: io::Write> crate::core::enc::Write for IoWrite<W> {
+        type Error = io::Error;
 
-    fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
-        self.0.write_all(input)
+        fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
+            self.0.write_all(input)
+        }
+    }
+
+    pub fn to_writer<T, W>(value: &T, writer: &mut W)
+        -> Result<(), crate::core::enc::Error<io::Error>>
+    where
+        T: Serialize,
+        W: io::Write
+    {
+        let writer = IoWrite(writer);
+        let mut writer = ser::Serializer::new(writer);
+        value.serialize(&mut writer)
     }
 }
 
-pub fn to_writer<T, W>(value: &T, writer: &mut W)
-    -> Result<(), crate::core::enc::Error<io::Error>>
-where
-    T: Serialize,
-    W: io::Write
-{
-    let writer = IoWrite(writer);
-    let mut writer = ser::Serializer::new(writer);
-    value.serialize(&mut writer)
-}
+pub use io_writer::to_writer;
 
-
+#[cfg(feature = "use_std")]
 #[test]
 fn test_serde_to_writer() {
     use std::fmt::Debug;

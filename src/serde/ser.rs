@@ -1,4 +1,4 @@
-use std::fmt;
+use core::fmt;
 use serde::Serialize;
 use crate::core::types;
 use crate::core::enc::{ self, Encode };
@@ -223,7 +223,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     where
         T: fmt::Display,
     {
-        use std::fmt::Write;
+        use core::fmt::Write;
 
         enc::StrStart.encode(&mut self.writer)?;
         let mut writer = FmtWriter {
