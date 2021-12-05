@@ -17,6 +17,7 @@ impl<W> Serializer<W> {
 impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     type Ok = ();
     type Error = enc::Error<W::Error>;
+
     type SerializeSeq = Collect<'a, W>;
     type SerializeTuple = BoundedCollect<'a, W>;
     type SerializeTupleStruct = BoundedCollect<'a, W>;

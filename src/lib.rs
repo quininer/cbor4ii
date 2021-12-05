@@ -2,7 +2,8 @@
 
 extern crate alloc;
 
-mod core;
+pub mod error;
+pub mod core;
 
 #[cfg(feature = "serde1")]
 pub mod serde;

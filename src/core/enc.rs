@@ -1,77 +1,13 @@
-use core::fmt;
+pub use crate::error::EncodeError as Error;
 use crate::core::types;
 
-
-#[non_exhaustive]
-pub enum Error<E> {
-    #[cfg(feature = "serde1")]
-    Msg(alloc::string::String),
-    Write(E)
-}
-
-impl<E> From<E> for Error<E> {
-    fn from(err: E) -> Error<E> {
-        Error::Write(err)
-    }
-}
-
-#[cfg(feature = "serde1")]
-#[cfg(feature = "use_std")]
-impl<E: std::error::Error + 'static> serde::ser::Error for Error<E> {
-    #[cold]
-    fn custom<T: fmt::Display>(msg: T) -> Self {
-        Error::Msg(msg.to_string())
-    }
-}
-
-#[cfg(feature = "serde1")]
-#[cfg(not(feature = "use_std"))]
-impl<E: fmt::Display + fmt::Debug> serde::ser::Error for Error<E> {
-    #[cold]
-    fn custom<T: fmt::Display>(msg: T) -> Self {
-        use crate::alloc::string::ToString;
-
-        Error::Msg(msg.to_string())
-    }
-}
-
-#[cfg(feature = "use_std")]
-impl<E: std::error::Error + 'static> std::error::Error for Error<E> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            #[cfg(feature = "serde1")]
-            Error::Msg(_) => None,
-            Error::Write(err) => Some(err)
-        }
-    }
-}
-
-impl<E: fmt::Debug> fmt::Debug for Error<E> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            #[cfg(feature = "serde1")]
-            Error::Msg(msg) => fmt::Debug::fmt(msg, f),
-            Error::Write(err) => fmt::Debug::fmt(err, f)
-        }
-    }
-}
-
-impl<E: fmt::Display> fmt::Display for Error<E> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            #[cfg(feature = "serde1")]
-            Error::Msg(msg) => fmt::Display::fmt(msg, f),
-            Error::Write(err) => fmt::Display::fmt(err, f)
-        }
-    }
-}
 
 pub trait Write {
     #[cfg(feature = "use_std")]
     type Error: std::error::Error + 'static;
 
     #[cfg(not(feature = "use_std"))]
-    type Error: fmt::Display + fmt::Debug;
+    type Error: core::fmt::Display + core::fmt::Debug;
 
     fn push(&mut self, input: &[u8]) -> Result<(), Self::Error>;
 }
