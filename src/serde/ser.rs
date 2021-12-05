@@ -111,7 +111,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        enc::Null.encode(&mut self.writer)?;
+        types::Null.encode(&mut self.writer)?;
         Ok(())
     }
 

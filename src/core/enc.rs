@@ -155,6 +155,7 @@ impl Encode for TypeNum<u64> {
     }
 }
 
+#[inline]
 fn strip_zero(input: &[u8]) -> &[u8] {
     let pos = input.iter()
         .position(|&n| n != 0x0)
@@ -395,9 +396,7 @@ impl Encode for bool {
     }
 }
 
-pub struct Null;
-
-impl Encode for Null {
+impl Encode for types::Null {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         writer.push(&[0xf6])?;
@@ -462,7 +461,6 @@ impl Encode for End {
 
 // from https://www.rfc-editor.org/rfc/rfc8949.html#name-examples-of-encoded-cbor-da
 #[test]
-#[cfg(feature = "half-f16")]
 #[cfg(feature = "use_std")]
 fn test_encoded() -> anyhow::Result<()> {
     pub struct Buffer(Vec<u8>);
@@ -485,8 +483,9 @@ fn test_encoded() -> anyhow::Result<()> {
     let mut buf = Buffer(Vec::new());
 
     macro_rules! test {
-        ( $( $input:expr , $expected:expr );* $( ; )? ) => {
+        ( $( $( @ #[$cfg_meta:meta] )* $input:expr , $expected:expr );* $( ; )? ) => {
             $(
+                $( #[$cfg_meta] )*
                 {
                     buf.0.clear();
                     ($input).encode(&mut buf)?;
@@ -527,22 +526,22 @@ fn test_encoded() -> anyhow::Result<()> {
         -100i64, "0x3863";
         -1000i64, "0x3903e7";
 
-        half::f16::from_f32(0.0), "0xf90000";
-        half::f16::from_f32(-0.0), "0xf98000";
-        half::f16::from_f32(1.0), "0xf93c00";
+        @ #[cfg(feature = "half-f16")] half::f16::from_f32(0.0), "0xf90000";
+        @ #[cfg(feature = "half-f16")] half::f16::from_f32(-0.0), "0xf98000";
+        @ #[cfg(feature = "half-f16")] half::f16::from_f32(1.0), "0xf93c00";
         1.1f64, "0xfb3ff199999999999a";
-        half::f16::from_f32(1.5), "0xf93e00";
-        half::f16::from_f32(65504.0), "0xf97bff";
+        @ #[cfg(feature = "half-f16")] half::f16::from_f32(1.5), "0xf93e00";
+        @ #[cfg(feature = "half-f16")] half::f16::from_f32(65504.0), "0xf97bff";
         100000.0f32, "0xfa47c35000";
         3.4028234663852886e+38f32, "0xfa7f7fffff";
         1.0e+300f64, "0xfb7e37e43c8800759c";
-        half::f16::from_f32(5.960464477539063e-8), "0xf90001";
-        half::f16::from_f32(0.00006103515625), "0xf90400";
-        half::f16::from_f32(-4.0), "0xf9c400";
+        @ #[cfg(feature = "half-f16")] half::f16::from_f32(5.960464477539063e-8), "0xf90001";
+        @ #[cfg(feature = "half-f16")] half::f16::from_f32(0.00006103515625), "0xf90400";
+        @ #[cfg(feature = "half-f16")] half::f16::from_f32(-4.0), "0xf9c400";
         -4.1f64, "0xfbc010666666666666";
-        half::f16::INFINITY, "0xf97c00";
-        half::f16::NAN, "0xf97e00";
-        half::f16::NEG_INFINITY, "0xf9fc00";
+        @ #[cfg(feature = "half-f16")] half::f16::INFINITY, "0xf97c00";
+        @ #[cfg(feature = "half-f16")] half::f16::NAN, "0xf97e00";
+        @ #[cfg(feature = "half-f16")] half::f16::NEG_INFINITY, "0xf9fc00";
         f32::INFINITY, "0xfa7f800000";
         f32::NAN, "0xfa7fc00000";
         f32::NEG_INFINITY, "0xfaff800000";
@@ -552,7 +551,7 @@ fn test_encoded() -> anyhow::Result<()> {
 
         false, "0xf4";
         true, "0xf5";
-        Null, "0xf6";
+        types::Null, "0xf6";
         types::Undefined, "0xf7";
 
         types::Simple(16), "0xf0";
