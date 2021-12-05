@@ -11,6 +11,7 @@ mod io_writer {
     impl<W: io::Write> crate::core::enc::Write for IoWrite<W> {
         type Error = io::Error;
 
+        #[inline]
         fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
             self.0.write_all(input)
         }

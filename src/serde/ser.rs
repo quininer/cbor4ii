@@ -25,97 +25,116 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     type SerializeStruct = BoundedCollect<'a, W>;
     type SerializeStructVariant = BoundedCollect<'a, W>;
 
+    #[inline]
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
         let mut buf = [0; 4];
         self.serialize_str(v.encode_utf8(&mut buf))
     }
 
+    #[inline]
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         v.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         types::Bytes(v).encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         enc::Null.encode(&mut self.writer)?;
         Ok(())
     }
 
+    #[inline]
     fn serialize_some<T: Serialize + ?Sized>(self, value: &T)
         -> Result<Self::Ok, Self::Error>
     {
         value.serialize(self)
     }
 
+    #[inline]
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         self.serialize_none()
     }
 
+    #[inline]
     fn serialize_unit_struct(self, _name: &'static str)
         -> Result<Self::Ok, Self::Error>
     {
         self.serialize_unit()
     }
 
+    #[inline]
     fn serialize_unit_variant(
         self,
         _name: &'static str,
@@ -125,6 +144,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         self.serialize_str(variant)
     }
 
+    #[inline]
     fn serialize_newtype_struct<T: Serialize + ?Sized>(
         self,
         name: &'static str,
@@ -133,6 +153,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         value.serialize(self)
     }
 
+    #[inline]
     fn serialize_newtype_variant<T: Serialize + ?Sized>(
         self,
         name: &'static str,
@@ -143,6 +164,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         todo!()
     }
 
+    #[inline]
     fn serialize_seq(self, len: Option<usize>)
         -> Result<Self::SerializeSeq, Self::Error>
     {
@@ -157,6 +179,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         })
     }
 
+    #[inline]
     fn serialize_tuple(self, len: usize)
         -> Result<Self::SerializeTuple, Self::Error>
     {
@@ -164,12 +187,14 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         Ok(BoundedCollect { ser: self })
     }
 
+    #[inline]
     fn serialize_tuple_struct(self, _name: &'static str, len: usize)
         -> Result<Self::SerializeTupleStruct, Self::Error>
     {
         self.serialize_tuple(len)
     }
 
+    #[inline]
     fn serialize_tuple_variant(
         self,
         name: &'static str,
@@ -180,6 +205,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         todo!()
     }
 
+    #[inline]
     fn serialize_map(self, len: Option<usize>)
         -> Result<Self::SerializeMap, Self::Error>
     {
@@ -194,6 +220,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         })
     }
 
+    #[inline]
     fn serialize_struct(self, _name: &'static str, len: usize)
         -> Result<Self::SerializeStruct, Self::Error>
     {
@@ -201,6 +228,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         Ok(BoundedCollect { ser: self })
     }
 
+    #[inline]
     fn serialize_struct_variant(
         self,
         name: &'static str,
@@ -211,14 +239,17 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         todo!()
     }
 
+    #[inline]
     fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
         todo!("impl bignum")
     }
 
+    #[inline]
     fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
         todo!("impl bignum")
     }
 
+    #[inline]
     fn collect_str<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: fmt::Display,
@@ -238,6 +269,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         Ok(())
     }
 
+    #[inline]
     fn is_human_readable(&self) -> bool {
         false
     }
@@ -256,12 +288,14 @@ impl<W: enc::Write> serde::ser::SerializeSeq for Collect<'_, W> {
     type Ok = ();
     type Error = enc::Error<W::Error>;
 
+    #[inline]
     fn serialize_element<T: Serialize + ?Sized>(&mut self, value: &T)
         -> Result<(), Self::Error>
     {
         value.serialize(&mut *self.ser)
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         if !self.bounded {
             enc::End.encode(&mut self.ser.writer)?;
@@ -275,14 +309,16 @@ impl<W: enc::Write> serde::ser::SerializeTuple for BoundedCollect<'_, W> {
     type Ok = ();
     type Error = enc::Error<W::Error>;
 
+    #[inline]
     fn serialize_element<T: Serialize + ?Sized>(&mut self, value: &T)
         -> Result<(), Self::Error>
     {
-        todo!()
+        value.serialize(&mut *self.ser)
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        Ok(())
     }
 }
 
@@ -290,12 +326,14 @@ impl<W: enc::Write> serde::ser::SerializeTupleStruct for BoundedCollect<'_, W> {
     type Ok = ();
     type Error = enc::Error<W::Error>;
 
+    #[inline]
     fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T)
         -> Result<(), Self::Error>
     {
         todo!()
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         todo!()
     }
@@ -305,12 +343,14 @@ impl<W: enc::Write> serde::ser::SerializeTupleVariant for BoundedCollect<'_, W> 
     type Ok = ();
     type Error = enc::Error<W::Error>;
 
+    #[inline]
     fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T)
         -> Result<(), Self::Error>
     {
         todo!()
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         todo!()
     }
@@ -320,18 +360,21 @@ impl<W: enc::Write> serde::ser::SerializeMap for Collect<'_, W> {
     type Ok = ();
     type Error = enc::Error<W::Error>;
 
+    #[inline]
     fn serialize_key<T: Serialize + ?Sized>(&mut self, key: &T)
         -> Result<(), Self::Error>
     {
         key.serialize(&mut *self.ser)
     }
 
+    #[inline]
     fn serialize_value<T: Serialize + ?Sized>(&mut self, value: &T)
         -> Result<(), Self::Error>
     {
         value.serialize(&mut *self.ser)
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         if !self.bounded {
             enc::End.encode(&mut self.ser.writer)?;
@@ -345,6 +388,7 @@ impl<W: enc::Write> serde::ser::SerializeStruct for BoundedCollect<'_, W> {
     type Ok = ();
     type Error = enc::Error<W::Error>;
 
+    #[inline]
     fn serialize_field<T: Serialize + ?Sized>(&mut self, key: &'static str, value: &T)
         -> Result<(), Self::Error>
     {
@@ -352,6 +396,7 @@ impl<W: enc::Write> serde::ser::SerializeStruct for BoundedCollect<'_, W> {
         value.serialize(&mut *self.ser)
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         Ok(())
     }
@@ -361,16 +406,19 @@ impl<W: enc::Write> serde::ser::SerializeStructVariant for BoundedCollect<'_, W>
     type Ok = ();
     type Error = enc::Error<W::Error>;
 
+    #[inline]
     fn serialize_field<T: Serialize + ?Sized>(&mut self, key: &'static str, value: &T)
         -> Result<(), Self::Error>
     {
         todo!()
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         todo!()
     }
 
+    #[inline]
     fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
         todo!()
     }
@@ -382,6 +430,7 @@ struct FmtWriter<'a, W: enc::Write> {
 }
 
 impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
+    #[inline]
     fn write_str(&mut self, input: &str) -> fmt::Result {
         match self.inner.push(input.as_bytes()) {
             Ok(()) => Ok(()),
