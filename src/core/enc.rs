@@ -5,7 +5,7 @@ use crate::core::types;
 #[non_exhaustive]
 pub enum Error<E> {
     #[cfg(feature = "serde1")]
-    Any(alloc::string::String),
+    Msg(alloc::string::String),
     Write(E)
 }
 
@@ -18,18 +18,20 @@ impl<E> From<E> for Error<E> {
 #[cfg(feature = "serde1")]
 #[cfg(feature = "use_std")]
 impl<E: std::error::Error + 'static> serde::ser::Error for Error<E> {
+    #[cold]
     fn custom<T: fmt::Display>(msg: T) -> Self {
-        Error::Any(msg.to_string())
+        Error::Msg(msg.to_string())
     }
 }
 
 #[cfg(feature = "serde1")]
 #[cfg(not(feature = "use_std"))]
 impl<E: fmt::Display + fmt::Debug> serde::ser::Error for Error<E> {
+    #[cold]
     fn custom<T: fmt::Display>(msg: T) -> Self {
         use crate::alloc::string::ToString;
 
-        Error::Any(msg.to_string())
+        Error::Msg(msg.to_string())
     }
 }
 
@@ -38,7 +40,7 @@ impl<E: std::error::Error + 'static> std::error::Error for Error<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             #[cfg(feature = "serde1")]
-            Error::Any(_) => None,
+            Error::Msg(_) => None,
             Error::Write(err) => Some(err)
         }
     }
@@ -48,7 +50,7 @@ impl<E: fmt::Debug> fmt::Debug for Error<E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             #[cfg(feature = "serde1")]
-            Error::Any(msg) => fmt::Debug::fmt(msg, f),
+            Error::Msg(msg) => fmt::Debug::fmt(msg, f),
             Error::Write(err) => fmt::Debug::fmt(err, f)
         }
     }
@@ -58,7 +60,7 @@ impl<E: fmt::Display> fmt::Display for Error<E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             #[cfg(feature = "serde1")]
-            Error::Any(msg) => fmt::Display::fmt(msg, f),
+            Error::Msg(msg) => fmt::Display::fmt(msg, f),
             Error::Write(err) => fmt::Display::fmt(err, f)
         }
     }
@@ -94,6 +96,7 @@ mod tag {
 }
 
 impl<V> TypeNum<V> {
+    #[inline]
     const fn new(type_: u8, value: V) -> TypeNum<V> {
         TypeNum { type_, value }
     }
@@ -152,6 +155,49 @@ impl Encode for TypeNum<u64> {
     }
 }
 
+fn strip_zero(input: &[u8]) -> &[u8] {
+    let pos = input.iter()
+        .position(|&n| n != 0x0)
+        .unwrap_or(input.len());
+    &input[pos..]
+}
+
+impl Encode for u128 {
+    #[inline]
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        let x = *self;
+        match u64::try_from(x) {
+            Ok(x) => TypeNum::new(tag::UNSIGNED, x).encode(writer),
+            Err(_) => {
+                let x = x.to_be_bytes();
+                let bytes = types::Bytes(strip_zero(&x));
+                types::Tag(0xc2, bytes).encode(writer)
+            }
+        }
+    }
+}
+
+impl Encode for i128 {
+    #[inline]
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        let x = *self;
+
+        if let Ok(x) = u128::try_from(x) {
+            x.encode(writer)
+        } else {
+            let x = -1 - x;
+
+            if let Ok(x) = u64::try_from(x) {
+                types::Negative(x).encode(writer)
+            } else {
+                let x = x.to_be_bytes();
+                let bytes = types::Bytes(strip_zero(&x));
+                types::Tag(0xc3, bytes).encode(writer)
+            }
+        }
+    }
+}
+
 macro_rules! encode_ux {
     ( $( $t:ty ),* ) => {
         $(
@@ -179,7 +225,7 @@ macro_rules! encode_nx {
 }
 
 macro_rules! encode_ix {
-    ( $( $t:ty = $t2:ty );* ) => {
+    ( $( $t:ty = $t2:ty );* $( ; )? ) => {
         $(
             impl Encode for $t {
                 #[inline]
@@ -201,7 +247,7 @@ encode_ix!(
     i8 = u8;
     i16 = u16;
     i32 = u32;
-    i64 = u64
+    i64 = u64;
 );
 
 impl Encode for types::Bytes<&'_ [u8]> {
@@ -472,15 +518,9 @@ fn test_encoded() -> anyhow::Result<()> {
         1000000u64, "0x1a000f4240";
         1000000000000u64, "0x1b000000e8d4a51000";
         18446744073709551615u64, "0x1bffffffffffffffff";
-
-        // TODO bignum
-        // 18446744073709551616, "0xc249010000000000000000";
-
-        // TODO u64 overflow
+        18446744073709551616u128, "0xc249010000000000000000";
         types::Negative((-18446744073709551616i128 - 1) as u64), "0x3bffffffffffffffff";
-
-        // TODO bignum
-        // -18446744073709551617, "0xc349010000000000000000";
+        -18446744073709551617i128, "0xc349010000000000000000";
 
         -1i64, "0x20";
         -10i64, "0x29";
@@ -549,6 +589,8 @@ fn test_encoded() -> anyhow::Result<()> {
 
         // TODO more map and array
     }
+
+    assert!(strip_zero(&[0x0]).is_empty());
 
     Ok(())
 }

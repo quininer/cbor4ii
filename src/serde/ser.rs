@@ -241,12 +241,14 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
-        todo!("impl bignum")
+        v.encode(&mut self.writer)?;
+        Ok(())
     }
 
     #[inline]
     fn serialize_u128(self, v: u128) -> Result<Self::Ok, Self::Error> {
-        todo!("impl bignum")
+        v.encode(&mut self.writer)?;
+        Ok(())
     }
 
     #[inline]
