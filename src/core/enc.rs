@@ -93,6 +93,7 @@ mod tag {
     pub const ARRAY:    u8 = 0x80;
     pub const MAP:      u8 = 0xa0;
     pub const SIMPLE:   u8 = 0xe0;
+    pub const TAG:      u8 = 0xc0;
 }
 
 impl<V> TypeNum<V> {
@@ -172,7 +173,7 @@ impl Encode for u128 {
             Err(_) => {
                 let x = x.to_be_bytes();
                 let bytes = types::Bytes(strip_zero(&x));
-                types::Tag(0xc2, bytes).encode(writer)
+                types::Tag(2, bytes).encode(writer)
             }
         }
     }
@@ -193,7 +194,7 @@ impl Encode for i128 {
             } else {
                 let x = x.to_be_bytes();
                 let bytes = types::Bytes(strip_zero(&x));
-                types::Tag(0xc3, bytes).encode(writer)
+                types::Tag(3, bytes).encode(writer)
             }
         }
     }
@@ -372,7 +373,7 @@ impl Encode for MapStartUnbounded {
 impl<T: Encode> Encode for types::Tag<T> {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[self.0])?;
+        TypeNum::new(tag::TAG, self.0).encode(writer)?;
         self.1.encode(writer)
     }
 }
@@ -557,7 +558,12 @@ fn test_encoded() -> anyhow::Result<()> {
         types::Simple(16), "0xf0";
         types::Simple(255), "0xf8ff";
 
-        // TODO tag
+        types::Tag(0, "2013-03-21T20:04:00Z"), "0xc074323031332d30332d32315432303a30343a30305a";
+        types::Tag(1, 1363896240u64), "0xc11a514b67b0";
+        types::Tag(1, 1363896240.5f64), "0xc1fb41d452d9ec200000";
+        types::Tag(23, types::Bytes(&[0x01, 0x02, 0x03, 0x04][..])), "0xd74401020304";
+        types::Tag(24, types::Bytes(&[0x64, 0x49, 0x45, 0x54, 0x46][..])), "0xd818456449455446";
+        types::Tag(32, "http://www.example.com"), "0xd82076687474703a2f2f7777772e6578616d706c652e636f6d";
 
         types::Bytes(&[0u8; 0][..]), "0x40";
         types::Bytes(&[0x01, 0x02, 0x03, 0x04][..]), "0x4401020304";
@@ -587,6 +593,181 @@ fn test_encoded() -> anyhow::Result<()> {
         "0xa56161614161626142616361436164614461656145";
 
         // TODO more map and array
+    }
+
+    // [1, [2, 3], [4, 5]]
+    {
+        buf.0.clear();
+        ArrayStartBounded(3).encode(&mut buf)?;
+        1u8.encode(&mut buf)?;
+        (&[2u64, 3u64][..]).encode(&mut buf)?;
+        (&[4i32, 5i32][..]).encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x8301820203820405");
+    }
+
+    // {"a": 1, "b": [2, 3]}
+    {
+        buf.0.clear();
+        MapStartBounded(2).encode(&mut buf)?;
+        "a".encode(&mut buf)?;
+        1u32.encode(&mut buf)?;
+        "b".encode(&mut buf)?;
+        (&[2u32, 3u32][..]).encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0xa26161016162820203");
+    }
+
+    // ["a", {"b": "c"}]
+    {
+        buf.0.clear();
+        ArrayStartBounded(2).encode(&mut buf)?;
+        "a".encode(&mut buf)?;
+        MapStartBounded(1).encode(&mut buf)?;
+        "b".encode(&mut buf)?;
+        "c".encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x826161a161626163");
+    }
+
+    // (_ h'0102', h'030405')
+    {
+        buf.0.clear();
+        BytesStart.encode(&mut buf)?;
+        types::Bytes(&[0x01, 0x02][..]).encode(&mut buf)?;
+        types::Bytes(&[0x03, 0x04, 0x05][..]).encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x5f42010243030405ff");
+    }
+
+    // (_ "strea", "ming")
+    {
+        buf.0.clear();
+        StrStart.encode(&mut buf)?;
+        "strea".encode(&mut buf)?;
+        "ming".encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x7f657374726561646d696e67ff");
+    }
+
+    // [_ ]
+    {
+        buf.0.clear();
+        ArrayStartUnbounded.encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x9fff");
+    }
+
+    // [_ 1, [2, 3], [_ 4, 5]]
+    {
+        buf.0.clear();
+        ArrayStartUnbounded.encode(&mut buf)?;
+        1u64.encode(&mut buf)?;
+        (&[2u32, 3u32][..]).encode(&mut buf)?;
+        ArrayStartUnbounded.encode(&mut buf)?;
+        4u64.encode(&mut buf)?;
+        5u64.encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x9f018202039f0405ffff");
+    }
+
+    // [_ 1, [2, 3], [4, 5]]
+    {
+        buf.0.clear();
+        ArrayStartUnbounded.encode(&mut buf)?;
+        1u64.encode(&mut buf)?;
+        (&[2u32, 3u32][..]).encode(&mut buf)?;
+        (&[4u32, 5u32][..]).encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x9f01820203820405ff");
+    }
+
+    // [1, [2, 3], [_ 4, 5]]
+    {
+        buf.0.clear();
+        ArrayStartBounded(3).encode(&mut buf)?;
+        1u64.encode(&mut buf)?;
+        (&[2u32, 3u32][..]).encode(&mut buf)?;
+        ArrayStartUnbounded.encode(&mut buf)?;
+        4u64.encode(&mut buf)?;
+        5u64.encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x83018202039f0405ff");
+    }
+
+    // [1, [_ 2, 3], [4, 5]]
+    {
+        buf.0.clear();
+        ArrayStartBounded(3).encode(&mut buf)?;
+        1u64.encode(&mut buf)?;
+        ArrayStartUnbounded.encode(&mut buf)?;
+        2u64.encode(&mut buf)?;
+        3u64.encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        (&[4u32, 5u32][..]).encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x83019f0203ff820405");
+    }
+
+    // [_ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+    {
+        buf.0.clear();
+        ArrayStartUnbounded.encode(&mut buf)?;
+        for i in 1u32..=25 {
+            i.encode(&mut buf)?;
+        }
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
+    }
+
+    // {_ "a": 1, "b": [_ 2, 3]}
+    {
+        buf.0.clear();
+        MapStartUnbounded.encode(&mut buf)?;
+        "a".encode(&mut buf)?;
+        1u32.encode(&mut buf)?;
+        "b".encode(&mut buf)?;
+        ArrayStartUnbounded.encode(&mut buf)?;
+        2i32.encode(&mut buf)?;
+        3i32.encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0xbf61610161629f0203ffff");
+    }
+
+    // ["a", {_ "b": "c"}]
+    {
+        buf.0.clear();
+        ArrayStartBounded(2).encode(&mut buf)?;
+        "a".encode(&mut buf)?;
+        MapStartUnbounded.encode(&mut buf)?;
+        "b".encode(&mut buf)?;
+        "c".encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0x826161bf61626163ff");
+    }
+
+    // {_ "Fun": true, "Amt": -2}
+    {
+        buf.0.clear();
+        MapStartUnbounded.encode(&mut buf)?;
+        "Fun".encode(&mut buf)?;
+        true.encode(&mut buf)?;
+        "Amt".encode(&mut buf)?;
+        (-2i32).encode(&mut buf)?;
+        End.encode(&mut buf)?;
+        let output = hex(&buf.0);
+        assert_eq!(output, "0xbf6346756ef563416d7421ff");
     }
 
     assert!(strip_zero(&[0x0]).is_empty());
