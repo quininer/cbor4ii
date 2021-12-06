@@ -158,11 +158,12 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_newtype_variant<T: Serialize + ?Sized>(
         self,
         name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
         value: &T
     ) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        enc::MapStartBounded(1).encode(&mut self.writer)?;
+        value.serialize(self)
     }
 
     #[inline]
@@ -199,11 +200,14 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_tuple_variant(
         self,
         name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         variant: &'static str,
         len: usize
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        todo!()
+        enc::MapStartBounded(1).encode(&mut self.writer)?;
+        name.encode(&mut self.writer)?;
+        enc::ArrayStartBounded(len).encode(&mut self.writer)?;
+        Ok(BoundedCollect { ser: self })
     }
 
     #[inline]
@@ -233,11 +237,14 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_struct_variant(
         self,
         name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         variant: &'static str,
         len: usize
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        todo!()
+        enc::MapStartBounded(1).encode(&mut self.writer)?;
+        name.encode(&mut self.writer)?;
+        enc::MapStartBounded(len).encode(&mut self.writer)?;
+        Ok(BoundedCollect { ser: self })
     }
 
     #[inline]
@@ -333,12 +340,12 @@ impl<W: enc::Write> serde::ser::SerializeTupleStruct for BoundedCollect<'_, W> {
     fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T)
         -> Result<(), Self::Error>
     {
-        todo!()
+        value.serialize(&mut *self.ser)
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        Ok(())
     }
 }
 
@@ -350,12 +357,12 @@ impl<W: enc::Write> serde::ser::SerializeTupleVariant for BoundedCollect<'_, W> 
     fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T)
         -> Result<(), Self::Error>
     {
-        todo!()
+        value.serialize(&mut *self.ser)
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        Ok(())
     }
 }
 
@@ -413,17 +420,18 @@ impl<W: enc::Write> serde::ser::SerializeStructVariant for BoundedCollect<'_, W>
     fn serialize_field<T: Serialize + ?Sized>(&mut self, key: &'static str, value: &T)
         -> Result<(), Self::Error>
     {
-        todo!()
+        key.serialize(&mut *self.ser)?;
+        value.serialize(&mut *self.ser)
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        Ok(())
     }
 
     #[inline]
     fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
-        todo!()
+        Ok(())
     }
 }
 

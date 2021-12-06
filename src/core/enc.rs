@@ -273,7 +273,7 @@ impl Encode for ArrayStartUnbounded {
     }
 }
 
-pub struct Map<'a, K, V>(&'a [(K, V)]);
+pub struct Map<'a, K, V>(pub &'a [(K, V)]);
 
 impl<K: Encode, V: Encode> Encode for Map<'_, K, V> {
     #[inline]

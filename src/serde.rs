@@ -5,10 +5,11 @@ mod io_writer {
     use std::io;
     use serde::Serialize;
     use super::ser;
+    use crate::core::enc;
 
     struct IoWrite<W>(W);
 
-    impl<W: io::Write> crate::core::enc::Write for IoWrite<W> {
+    impl<W: io::Write> enc::Write for IoWrite<W> {
         type Error = io::Error;
 
         #[inline]
@@ -18,7 +19,7 @@ mod io_writer {
     }
 
     pub fn to_writer<T, W>(value: &T, writer: &mut W)
-        -> Result<(), crate::core::enc::Error<io::Error>>
+        -> Result<(), enc::Error<io::Error>>
     where
         T: Serialize,
         W: io::Write
