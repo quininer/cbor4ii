@@ -2,8 +2,10 @@
 
 extern crate alloc;
 
-pub mod error;
+mod error;
 pub mod core;
 
 #[cfg(feature = "serde1")]
 pub mod serde;
+
+pub use error::EncodeError;

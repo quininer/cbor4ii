@@ -12,6 +12,10 @@ impl<W> Serializer<W> {
     pub fn new(writer: W) -> Serializer<W> {
         Serializer { writer }
     }
+
+    pub fn into_inner(self) -> W {
+        self.writer
+    }
 }
 
 impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
@@ -158,11 +162,12 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_newtype_variant<T: Serialize + ?Sized>(
         self,
         name: &'static str,
-        _variant_index: u32,
+        variant_index: u32,
         _variant: &'static str,
         value: &T
     ) -> Result<Self::Ok, Self::Error> {
         enc::MapStartBounded(1).encode(&mut self.writer)?;
+        variant_index.encode(&mut self.writer)?;
         value.serialize(self)
     }
 
@@ -199,13 +204,13 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_tuple_variant(
         self,
-        name: &'static str,
+        _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         len: usize
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         enc::MapStartBounded(1).encode(&mut self.writer)?;
-        name.encode(&mut self.writer)?;
+        variant.encode(&mut self.writer)?;
         enc::ArrayStartBounded(len).encode(&mut self.writer)?;
         Ok(BoundedCollect { ser: self })
     }
@@ -236,13 +241,13 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_struct_variant(
         self,
-        name: &'static str,
+        _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         len: usize
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         enc::MapStartBounded(1).encode(&mut self.writer)?;
-        name.encode(&mut self.writer)?;
+        variant.encode(&mut self.writer)?;
         enc::MapStartBounded(len).encode(&mut self.writer)?;
         Ok(BoundedCollect { ser: self })
     }
@@ -431,11 +436,6 @@ impl<W: enc::Write> serde::ser::SerializeStructVariant for BoundedCollect<'_, W>
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(())
-    }
-
-    #[inline]
-    fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
         Ok(())
     }
 }

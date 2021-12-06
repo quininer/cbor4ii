@@ -3,6 +3,7 @@ pub mod ser;
 #[cfg(feature = "use_std")]
 mod io_writer {
     use std::io;
+    use std::collections::TryReserveError;
     use serde::Serialize;
     use super::ser;
     use crate::core::enc;
@@ -18,40 +19,39 @@ mod io_writer {
         }
     }
 
-    pub fn to_writer<T, W>(value: &T, writer: &mut W)
+    pub fn to_writer<W, T>(writer: &mut W, value: &T)
         -> Result<(), enc::Error<io::Error>>
     where
-        T: Serialize,
-        W: io::Write
+        W: io::Write,
+        T: Serialize
     {
         let writer = IoWrite(writer);
         let mut writer = ser::Serializer::new(writer);
         value.serialize(&mut writer)
     }
-}
 
-pub use io_writer::to_writer;
+    struct BufWriter(Vec<u8>);
 
-#[cfg(feature = "use_std")]
-#[test]
-fn test_serde_to_writer() {
-    use std::fmt::Debug;
-    use serde::de::DeserializeOwned;
+    impl enc::Write for BufWriter {
+        type Error = TryReserveError;
 
-    let value = vec![
-        Some(0x99u32),
-        None,
-        Some(0x33u32)
-    ];
-
-    let mut output = Vec::new();
-    to_writer(&value, &mut output).unwrap();
-
-    #[track_caller]
-    fn assert_value<T: Eq + Debug + DeserializeOwned>(bytes: &[u8], value: T) {
-        let value2: T = serde_cbor::from_slice(bytes).unwrap();
-        assert_eq!(value, value2);
+        #[inline]
+        fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
+            self.0.try_reserve(input.len())?;
+            self.0.extend_from_slice(input);
+            Ok(())
+        }
     }
 
-    assert_value(&output, value);
+    pub fn to_vec<T>(buf: Vec<u8>, value: &T)
+        -> Result<Vec<u8>, enc::Error<TryReserveError>>
+    where T: Serialize
+    {
+        let writer = BufWriter(buf);
+        let mut writer = ser::Serializer::new(writer);
+        value.serialize(&mut writer)?;
+        Ok(writer.into_inner().0)
+    }
 }
+
+pub use io_writer::{ to_writer, to_vec };

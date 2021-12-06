@@ -63,7 +63,7 @@ fn bench_ser(c: &mut Criterion) {
 
         b.iter(|| {
             buf.clear();
-            cbor::serde::to_writer(black_box(&log), black_box(&mut buf)).unwrap();
+            cbor4ii::serde::to_writer(black_box(&mut buf), black_box(&log)).unwrap();
         })
     });
 }
