@@ -274,7 +274,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         let mut buf = FmtReadBuffer::default();
 
         if write!(&mut buf, "{}", value).is_ok() {
-            types::BadStr(buf.read()).encode(&mut self.writer)?;
+            enc::BadStr(buf.read()).encode(&mut self.writer)?;
         } else {
             enc::StrStart.encode(&mut self.writer)?;
             let mut writer = FmtWriter {

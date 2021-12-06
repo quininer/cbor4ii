@@ -40,6 +40,15 @@ fn bench_ser(c: &mut Criterion) {
         msg: &msg
     };
 
+    c.bench_function("cbor4ii", |b| {
+        let mut buf = Vec::new();
+
+        b.iter(|| {
+            buf.clear();
+            cbor4ii::serde::to_writer(black_box(&mut buf), black_box(&log)).unwrap();
+        })
+    });
+
     c.bench_function("serde_cbor", |b| {
         let mut buf = Vec::new();
 
@@ -55,15 +64,6 @@ fn bench_ser(c: &mut Criterion) {
         b.iter(|| {
             buf.clear();
             ciborium::ser::into_writer(black_box(&log), black_box(&mut buf)).unwrap();
-        })
-    });
-
-    c.bench_function("this", |b| {
-        let mut buf = Vec::new();
-
-        b.iter(|| {
-            buf.clear();
-            cbor4ii::serde::to_writer(black_box(&mut buf), black_box(&log)).unwrap();
         })
     });
 }

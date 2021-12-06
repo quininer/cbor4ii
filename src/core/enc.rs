@@ -16,6 +16,15 @@ pub trait Encode {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>>;
 }
 
+impl<T: Encode> Encode for &'_ T {
+    #[inline]
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        <T as Encode>::encode(self, writer)
+    }
+}
+
+pub struct Negative<T>(pub T);
+
 struct TypeNum<V> {
     type_: u8,
     value: V
@@ -126,7 +135,7 @@ impl Encode for i128 {
             let x = -1 - x;
 
             if let Ok(x) = u64::try_from(x) {
-                types::Negative(x).encode(writer)
+                Negative(x).encode(writer)
             } else {
                 let x = x.to_be_bytes();
                 let bytes = types::Bytes(strip_zero(&x));
@@ -152,7 +161,7 @@ macro_rules! encode_ux {
 macro_rules! encode_nx {
     ( $( $t:ty ),* ) => {
         $(
-            impl Encode for types::Negative<$t> {
+            impl Encode for Negative<$t> {
                 #[inline]
                 fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
                     TypeNum::new(tag::NEGATIVE, self.0).encode(writer)
@@ -171,7 +180,7 @@ macro_rules! encode_ix {
                     let x = *self;
                     match <$t2>::try_from(x) {
                         Ok(x) => x.encode(writer),
-                        Err(_) => types::Negative((-1 - x) as $t2).encode(writer)
+                        Err(_) => Negative((-1 - x) as $t2).encode(writer)
                     }
                 }
             }
@@ -216,7 +225,9 @@ impl Encode for &'_ str {
     }
 }
 
-impl Encode for types::BadStr<&'_ [u8]> {
+pub struct BadStr<'a>(pub &'a [u8]);
+
+impl Encode for BadStr<'_> {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         TypeNum::new(tag::STRING, self.0.len() as u64).encode(writer)?;
@@ -229,7 +240,7 @@ impl Encode for types::BadStr<&'_ [u8]> {
 impl Encode for &'_ bstr::BStr {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        types::BadStr(self.as_ref()).encode(writer)
+        BadStr(self.as_ref()).encode(writer)
     }
 }
 
@@ -454,7 +465,7 @@ fn test_encoded() -> anyhow::Result<()> {
         1000000000000u64, "0x1b000000e8d4a51000";
         18446744073709551615u64, "0x1bffffffffffffffff";
         18446744073709551616u128, "0xc249010000000000000000";
-        types::Negative((-18446744073709551616i128 - 1) as u64), "0x3bffffffffffffffff";
+        Negative((-18446744073709551616i128 - 1) as u64), "0x3bffffffffffffffff";
         -18446744073709551617i128, "0xc349010000000000000000";
 
         -1i64, "0x20";
