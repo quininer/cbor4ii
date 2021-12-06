@@ -324,10 +324,9 @@ impl Encode for types::Simple {
 impl Encode for bool {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[if *self {
-            0xf5
-        } else {
-            0xf4
+        writer.push(&[match *self {
+            true => 0xf5,
+            false => 0xf4
         }])?;
         Ok(())
     }

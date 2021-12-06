@@ -266,15 +266,20 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     {
         use core::fmt::Write;
 
-        enc::StrStart.encode(&mut self.writer)?;
-        let mut writer = FmtWriter {
-            inner: &mut self.writer,
-            error: None
-        };
-        if write!(&mut writer, "{}", value).is_err() {
-            return Err(enc::Error::Write(writer.error.unwrap()));
+        let mut buf = FmtReadBuffer::default();
+
+        if write!(&mut buf, "{}", value).is_ok() {
+            types::BadStr(buf.read()).encode(&mut self.writer)?;
+        } else {
+            enc::StrStart.encode(&mut self.writer)?;
+            let mut writer = FmtWriter {
+                inner: &mut self.writer,
+                error: None
+            };
+            write!(&mut writer, "{}", value)
+                .map_err(|_| writer.error.unwrap())?;
+            enc::End.encode(&mut self.writer)?;
         }
-        enc::End.encode(&mut self.writer)?;
 
         Ok(())
     }
@@ -435,15 +440,48 @@ impl<W: enc::Write> serde::ser::SerializeStructVariant for BoundedCollect<'_, W>
     }
 }
 
+struct FmtReadBuffer {
+    buf: [u8; 256],
+    pos: u8,
+}
+
+impl Default for FmtReadBuffer {
+    fn default() -> FmtReadBuffer {
+        FmtReadBuffer { buf: [0; 256], pos: 0 }
+    }
+}
+
+impl FmtReadBuffer {
+    fn read(&self) -> &[u8] {
+        let pos = self.pos as usize;
+        &self.buf[..pos]
+    }
+}
+
+impl fmt::Write for FmtReadBuffer {
+    #[inline]
+    fn write_str(&mut self, input: &str) -> fmt::Result {
+        let pos = self.pos as usize;
+        if self.buf.len() - pos >= input.len() {
+            self.buf[pos..][..input.len()]
+                .copy_from_slice(input.as_bytes());
+            self.pos += input.len() as u8;
+            Ok(())
+        } else {
+            Err(fmt::Error)
+        }
+    }
+}
+
 struct FmtWriter<'a, W: enc::Write> {
     inner: &'a mut W,
-    error: Option<W::Error>
+    error: Option<enc::Error<W::Error>>
 }
 
 impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
     #[inline]
     fn write_str(&mut self, input: &str) -> fmt::Result {
-        match self.inner.push(input.as_bytes()) {
+        match input.encode(self.inner) {
             Ok(()) => Ok(()),
             Err(err) => {
                 self.error = Some(err);
