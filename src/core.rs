@@ -52,7 +52,7 @@ impl enc::Encode for Value {
             Value::Bytes(v) => types::Bytes(v.as_slice()).encode(writer),
             Value::Text(v) => v.as_str().encode(writer),
             Value::List(v) => v.as_slice().encode(writer),
-            Value::Map(v) => enc::Map(v.as_slice()).encode(writer),
+            Value::Map(v) => types::Map(v.as_slice()).encode(writer),
             Value::Tag(tag, v) => types::Tag(*tag, &**v).encode(writer)
         }
     }

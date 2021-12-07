@@ -200,7 +200,7 @@ pub struct BytesStart;
 impl Encode for BytesStart {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[0x5f])?;
+        writer.push(&[(major::BYTES << 5) | marker::START])?;
         Ok(())
     }
 }
@@ -271,9 +271,7 @@ impl Encode for ArrayStartUnbounded {
     }
 }
 
-pub struct Map<'a, K, V>(pub &'a [(K, V)]);
-
-impl<K: Encode, V: Encode> Encode for Map<'_, K, V> {
+impl<K: Encode, V: Encode> Encode for types::Map<&'_ [(K, V)]> {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         MapStartBounded(self.0.len()).encode(writer)?;
@@ -517,12 +515,12 @@ fn test_encoded() -> anyhow::Result<()> {
         &[1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25][..],
         "0x98190102030405060708090a0b0c0d0e0f101112131415161718181819";
 
-        Map(&[(0u8, 0u8); 0]), "0xa0";
-        Map(&[(1u8, 2u8), (3u8, 4u8)]), "0xa201020304";
+        types::Map(&[(0u8, 0u8); 0][..]), "0xa0";
+        types::Map(&[(1u8, 2u8), (3u8, 4u8)][..]), "0xa201020304";
 
         // TODO any map
 
-        Map(&[("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")]),
+        types::Map(&[("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")][..]),
         "0xa56161614161626142616361436164614461656145";
 
         // TODO more map and array

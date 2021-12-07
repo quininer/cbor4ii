@@ -1,4 +1,4 @@
-use crate::core::{ major, types };
+use crate::core::{ major, marker, types };
 pub use crate::error::DecodeError as Error;
 
 #[cfg(feature = "use_alloc")]
@@ -21,7 +21,13 @@ pub enum Reference<'a, 'b> {
 }
 
 pub trait Decode<'a>: Sized {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>>;
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>>;
+
+    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let byte = pull_one(reader)?;
+        Self::decode_with(byte, reader)
+
+    }
 }
 
 impl Reference<'_, '_> {
@@ -139,9 +145,8 @@ macro_rules! decode_ux {
     ( $( $t:ty , $decode_fn:ident );* $( ; )? ) => {
         $(
             impl<'a> Decode<'a> for $t {
-                fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-                    let b = pull_one(reader)?;
-                    TypeNum::new(!(major::UNSIGNED << 5), b).$decode_fn(reader)
+                fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+                    TypeNum::new(!(major::UNSIGNED << 5), byte).$decode_fn(reader)
                 }
             }
         )*
@@ -152,15 +157,14 @@ macro_rules! decode_ix {
     ( $( $t:ty , $decode_fn:ident );* $( ; )? ) => {
         $(
             impl<'a> Decode<'a> for $t {
-                fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-                    let b = pull_one(reader)?;
-                    match b >> 5 {
+                fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+                    match byte >> 5 {
                         major::UNSIGNED => {
-                            let v = TypeNum::new(!(major::UNSIGNED << 5), b).$decode_fn(reader)?;
+                            let v = TypeNum::new(!(major::UNSIGNED << 5), byte).$decode_fn(reader)?;
                             <$t>::try_from(v).map_err(Error::CastOverflow)
                         },
                         major::NEGATIVE => {
-                            let v = TypeNum::new(!(major::NEGATIVE << 5), b).$decode_fn(reader)?;
+                            let v = TypeNum::new(!(major::NEGATIVE << 5), byte).$decode_fn(reader)?;
                             let v = v.checked_add(1)
                                 .ok_or(Error::Overflow { name: stringify!($t) })?;
                             let v = <$t>::try_from(v)
@@ -169,7 +173,7 @@ macro_rules! decode_ix {
                         },
                         _ => Err(Error::TypeMismatch {
                             name: stringify!($t),
-                            byte: b
+                            byte
                         })
                     }
                 }
@@ -195,110 +199,166 @@ decode_ix! {
 struct TypeBytes<'a, const TYPE: u8>(&'a [u8]);
 
 #[cfg(feature = "use_alloc")]
-struct TypeBuf<const TYPE: u8>(Vec<u8>);
+struct TypeBuf<'b, const TYPE: u8>(&'b mut Vec<u8>);
 
-impl<'a, const TYPE: u8> Decode<'a> for TypeBytes<'a, TYPE> {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let b = pull_one(reader)?;
-        let len = TypeNum::new(TYPE, b).decode_u64(reader)?;
-        let len = usize::try_from(len).map_err(Error::CastOverflow)?;
+fn decode_bytes<'a, R: Read<'a>>(name: &'static str, major_limit: u8, byte: u8, reader: &mut R)
+    -> Result<&'a [u8], Error<R::Error>>
+{
+    let len = TypeNum::new(major_limit, byte).decode_u64(reader)?;
+    let len = usize::try_from(len).map_err(Error::CastOverflow)?;
 
-        match reader.fill(len)? {
-            Reference::Long(buf)
-                if buf.len() >= len => Ok(TypeBytes(&buf[..len])),
-            Reference::Long(buf) => Err(Error::RequireLength {
-                name: "bytes",
-                expect: len,
-                value: buf.len()
-            }),
-            Reference::Short(_) => Err(Error::RequireBorrowed { name: "bytes" })
-        }
+    match reader.fill(len)? {
+        Reference::Long(buf)
+            if buf.len() >= len => Ok(&buf[..len]),
+        Reference::Long(buf) => Err(Error::RequireLength {
+            name,
+            expect: len,
+            value: buf.len()
+        }),
+        Reference::Short(_) => Err(Error::RequireBorrowed { name })
     }
 }
 
-// TODO support bytes seq
 #[cfg(feature = "use_alloc")]
-impl<'a, const TYPE: u8> Decode<'a> for TypeBuf<TYPE> {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        const CAP_LIMIT: usize = 16 * 1024;
+fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, follow: bool, reader: &mut R, buf: &mut Vec<u8>)
+    -> Result<(), Error<R::Error>>
+{
+    const CAP_LIMIT: usize = 16 * 1024;
 
-        let b = pull_one(reader)?;
-        let len = TypeNum::new(TYPE, b).decode_u64(reader)?;
+    if byte == (marker::START | (major << 5)) {
+        let byte = pull_one(reader)?;
+        decode_buf(major, byte, true, reader, buf)
+    } else if follow && byte == marker::BREAK {
+        Ok(())
+    } else {
+        let len = TypeNum::new(!(major << 5), byte).decode_u64(reader)?;
         let mut len = usize::try_from(len).map_err(Error::CastOverflow)?;
 
-        let mut buf = if len <= CAP_LIMIT {
-            Vec::with_capacity(len)
-        } else {
-            Vec::new()
-        };
+        if len <= CAP_LIMIT {
+            buf.reserve(len); // TODO try_reserve ?
+        }
 
         while len != 0 {
             let readbuf = reader.fill(len)?;
-            buf.extend_from_slice(readbuf.as_ref());
-            let readlen = readbuf.as_ref().len();
+            let readbuf = readbuf.as_ref();
+            let readlen = readbuf.len();
+            buf.extend_from_slice(readbuf);
             reader.advance(readlen);
             len -= readlen;
-
-            // TODO try_reserve ?
         }
 
-        Ok(TypeBuf(buf))
+        Ok(())
     }
 }
 
 impl<'a> Decode<'a> for types::Bytes<&'a [u8]> {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = TypeBytes::<{ !(major::BYTES << 5) }>::decode(reader)?;
-        Ok(types::Bytes(buf.0))
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let buf = decode_bytes("bytes", !(major::BYTES << 5), byte, reader)?;
+        Ok(types::Bytes(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
 impl<'a> Decode<'a> for types::Bytes<Vec<u8>> {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = TypeBuf::<{ !(major::BYTES << 5) }>::decode(reader)?;
-        Ok(types::Bytes(buf.0))
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let mut buf = Vec::new();
+        decode_buf(major::BYTES, byte, false, reader, &mut buf)?;
+        Ok(types::Bytes(buf))
     }
 }
 
 impl<'a> Decode<'a> for &'a str {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = TypeBytes::<{ !(major::STRING << 5) }>::decode(reader)?;
-        core::str::from_utf8(buf.0).map_err(Error::InvalidUtf8)
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let buf = decode_bytes("str", !(major::BYTES << 5), byte, reader)?;
+        core::str::from_utf8(buf).map_err(Error::InvalidUtf8)
     }
 }
 
 #[cfg(feature = "use_alloc")]
 impl<'a> Decode<'a> for types::Bytes<String> {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = TypeBuf::<{ !(major::STRING << 5) }>::decode(reader)?;
-        let buf = String::from_utf8(buf.0)
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let mut buf = Vec::new();
+        decode_buf(major::STRING, byte, false, reader, &mut buf)?;
+        let buf = String::from_utf8(buf)
             .map_err(|err| Error::InvalidUtf8(err.utf8_error()))?;
         Ok(types::Bytes(buf))
     }
 }
 
 impl<'a> Decode<'a> for types::BadStr<&'a [u8]> {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = TypeBytes::<{ !(major::STRING << 5) }>::decode(reader)?;
-        Ok(types::BadStr(buf.0))
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let buf = decode_bytes("str", !(major::BYTES << 5), byte, reader)?;
+        Ok(types::BadStr(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
 impl<'a> Decode<'a> for types::BadStr<Vec<u8>> {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = TypeBuf::<{ !(major::STRING << 5) }>::decode(reader)?;
-        Ok(types::BadStr(buf.0))
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let mut buf = Vec::new();
+        decode_buf(major::STRING, byte, false, reader, &mut buf)?;
+        Ok(types::BadStr(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
 impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let b = pull_one(reader)?;
-        // TypeNum::new(!(major::ARRAY << 5), b).decode_u64(reader)?;
-        todo!()
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let mut arr = Vec::new();
+
+        if byte != (marker::START | (major::ARRAY << 5)) {
+            let len = TypeNum::new(!(major::ARRAY << 5), byte).decode_u64(reader)?;
+            let len = usize::try_from(len).map_err(Error::CastOverflow)?;
+
+            for _ in 0..len {
+                arr.push(T::decode(reader)?);
+            }
+        } else {
+            loop {
+                let byte = pull_one(reader)?;
+
+                if byte == marker::BREAK {
+                    break;
+                }
+
+                arr.push(T::decode_with(byte, reader)?);
+            }
+        }
+
+        Ok(arr)
+    }
+}
+
+
+#[cfg(feature = "use_alloc")]
+impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let mut map = Vec::new();
+
+        if byte != (marker::START | (major::MAP << 5)) {
+            let len = TypeNum::new(!(major::MAP << 5), byte).decode_u64(reader)?;
+            let len = usize::try_from(len).map_err(Error::CastOverflow)?;
+
+            for _ in 0..len {
+                let k = K::decode(reader)?;
+                let v = V::decode(reader)?;
+                map.push((k, v));
+            }
+        } else {
+            loop {
+                let byte = pull_one(reader)?;
+
+                if byte == marker::BREAK {
+                    break;
+                }
+
+                let k = K::decode(reader)?;
+                let v = V::decode(reader)?;
+                map.push((k, v));
+            }
+        }
+
+        Ok(types::Map(map))
     }
 }
 
