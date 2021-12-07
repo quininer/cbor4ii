@@ -10,7 +10,7 @@ fn de<'a,T>(bytes: &'a [u8], _value: &T)
     -> T
 where T: Deserialize<'a>
 {
-    serde_cbor::from_slice(bytes).unwrap()
+    cbor4ii::serde::from_slice(bytes).unwrap()
 }
 
 macro_rules! assert_test {
