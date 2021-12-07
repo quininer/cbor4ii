@@ -1,6 +1,6 @@
 pub mod types;
 pub mod enc;
-mod dec;
+pub mod dec;
 
 #[cfg(feature = "use_alloc")]
 use alloc::{ vec::Vec, boxed::Box, string::String };

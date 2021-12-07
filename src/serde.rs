@@ -1,4 +1,5 @@
 pub mod ser;
+pub mod de;
 
 #[cfg(feature = "use_std")]
 mod io_writer {

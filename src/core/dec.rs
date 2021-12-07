@@ -41,7 +41,17 @@ impl Reference<'_, '_> {
 }
 
 #[inline]
-fn pull_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
+pub fn peek_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
+    let b = reader.fill(1)?
+        .as_ref()
+        .get(0)
+        .copied()
+        .ok_or(Error::Eof)?;
+    Ok(b)
+}
+
+#[inline]
+pub fn pull_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
     let b = reader.fill(1)?
         .as_ref()
         .get(0)
@@ -52,16 +62,21 @@ fn pull_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
 }
 
 #[inline]
-fn pull_exact<'a, R: Read<'a>>(reader: &mut R, buf: &mut [u8]) -> Result<(), Error<R::Error>> {
-    let readbuf = reader.fill(1)?;
-    let readbuf = readbuf.as_ref();
-    if readbuf.len() >= buf.len() {
-        buf.copy_from_slice(&readbuf[..buf.len()]);
-        reader.advance(1);
-        Ok(())
-    } else {
-        Err(Error::Eof)
+fn pull_exact<'a, R: Read<'a>>(reader: &mut R, mut buf: &mut [u8]) -> Result<(), Error<R::Error>> {
+    while buf.is_empty() {
+        let readbuf = reader.fill(buf.len())?;
+        let readbuf = readbuf.as_ref();
+
+        if readbuf.is_empty() {
+            return Err(Error::Eof);
+        }
+
+        let len = core::cmp::min(buf.len(), readbuf.len());
+        buf.copy_from_slice(&readbuf[..len]);
+        buf = &mut buf[len..];
     }
+
+    Ok(())
 }
 
 struct TypeNum {
@@ -242,6 +257,11 @@ fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, follow: bool, reader: &mut R
             let readbuf = reader.fill(len)?;
             let readbuf = readbuf.as_ref();
             let readlen = readbuf.len();
+
+            if readlen == 0 {
+                return Err(Error::Eof);
+            }
+
             buf.extend_from_slice(readbuf);
             reader.advance(readlen);
             len -= readlen;
@@ -275,13 +295,13 @@ impl<'a> Decode<'a> for &'a str {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for types::Bytes<String> {
+impl<'a> Decode<'a> for String {
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         let mut buf = Vec::new();
         decode_buf(major::STRING, byte, false, reader, &mut buf)?;
         let buf = String::from_utf8(buf)
             .map_err(|err| Error::InvalidUtf8(err.utf8_error()))?;
-        Ok(types::Bytes(buf))
+        Ok(buf)
     }
 }
 
@@ -301,17 +321,27 @@ impl<'a> Decode<'a> for types::BadStr<Vec<u8>> {
     }
 }
 
+pub fn decode_len<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R)
+    -> Result<Option<usize>, Error<R::Error>>
+{
+    if byte != (marker::START | (major << 5)) {
+        let len = TypeNum::new(!(major << 5), byte).decode_u64(reader)?;
+        let len = usize::try_from(len).map_err(Error::CastOverflow)?;
+        Ok(Some(len))
+    } else {
+        Ok(None)
+    }
+}
+
 #[cfg(feature = "use_alloc")]
 impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         let mut arr = Vec::new();
 
-        if byte != (marker::START | (major::ARRAY << 5)) {
-            let len = TypeNum::new(!(major::ARRAY << 5), byte).decode_u64(reader)?;
-            let len = usize::try_from(len).map_err(Error::CastOverflow)?;
-
+        if let Some(len) = decode_len(major::ARRAY, byte, reader)? {
             for _ in 0..len {
-                arr.push(T::decode(reader)?);
+                let value = T::decode_with(byte, reader)?;
+                arr.push(value);
             }
         } else {
             loop {
@@ -321,7 +351,8 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
                     break;
                 }
 
-                arr.push(T::decode_with(byte, reader)?);
+                let value = T::decode_with(byte, reader)?;
+                arr.push(value);
             }
         }
 
@@ -329,16 +360,12 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
     }
 }
 
-
 #[cfg(feature = "use_alloc")]
 impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         let mut map = Vec::new();
 
-        if byte != (marker::START | (major::MAP << 5)) {
-            let len = TypeNum::new(!(major::MAP << 5), byte).decode_u64(reader)?;
-            let len = usize::try_from(len).map_err(Error::CastOverflow)?;
-
+        if let Some(len) = decode_len(major::MAP, byte, reader)? {
             for _ in 0..len {
                 let k = K::decode(reader)?;
                 let v = V::decode(reader)?;
@@ -361,6 +388,60 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
         Ok(types::Map(map))
     }
 }
+
+impl<'a> Decode<'a> for bool {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        match byte {
+            marker::FALSE => Ok(false),
+            marker::TRUE => Ok(true),
+            _ => Err(Error::TypeMismatch {
+                name: "bool",
+                byte
+            })
+        }
+    }
+}
+
+impl<'a, T: Decode<'a>> Decode<'a> for Option<T> {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        if byte != marker::NULL && byte != marker::UNDEFINED {
+            T::decode_with(byte, reader).map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl<'a> Decode<'a> for f32 {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        if byte == marker::F32 {
+            let mut buf = [0; 4];
+            pull_exact(reader, &mut buf)?;
+            Ok(f32::from_be_bytes(buf))
+        } else {
+            Err(Error::TypeMismatch {
+                name: "f32",
+                byte
+            })
+        }
+    }
+}
+
+impl<'a> Decode<'a> for f64 {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        if byte == marker::F64 {
+            let mut buf = [0; 8];
+            pull_exact(reader, &mut buf)?;
+            Ok(f64::from_be_bytes(buf))
+        } else {
+            Err(Error::TypeMismatch {
+                name: "f64",
+                byte
+            })
+        }
+    }
+}
+
 
 
 pub enum Token {
