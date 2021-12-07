@@ -305,6 +305,8 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
     pub fn enum_(de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
+        // TODO handle serialize_unit_variant
+
         let byte = dec::pull_one(&mut de.reader)?;
         let len = dec::decode_len(major::MAP, byte, &mut de.reader)?;
         Ok(Accessor { de, len })
@@ -381,12 +383,14 @@ where
     type Error = dec::Error<R::Error>;
     type Variant = Accessor<'a, R>;
 
-    fn variant_seed<V>(self, seed: V)
+    fn variant_seed<V>(mut self, seed: V)
         -> Result<(V::Value, Self::Variant), Self::Error>
     where V: de::DeserializeSeed<'de>
     {
-        let variant = seed.deserialize(&mut *self.de)?;
-        Ok((variant, self))
+        match de::MapAccess::next_key_seed(&mut self, seed)? {
+            Some(variant) => Ok((variant, self)),
+            None => todo!()
+        }
     }
 }
 
@@ -397,7 +401,15 @@ where
     type Error = dec::Error<R::Error>;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
-        Ok(())
+        let byte = dec::pull_one(&mut self.de.reader)?;
+        if byte == marker::NULL || byte == marker::UNDEFINED {
+            Ok(())
+        } else {
+            Err(dec::Error::TypeMismatch {
+                name: "enum::unit",
+                byte
+            })
+        }
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>

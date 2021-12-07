@@ -85,11 +85,8 @@ struct TypeNum {
 }
 
 impl TypeNum {
-    const fn new(major: u8, byte: u8) -> TypeNum {
-        TypeNum {
-            major_limit: !major,
-            byte
-        }
+    const fn new(major_limit: u8, byte: u8) -> TypeNum {
+        TypeNum { major_limit, byte }
     }
 
     fn decode_u8<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u8, Error<R::Error>> {
