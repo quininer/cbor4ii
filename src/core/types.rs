@@ -1,3 +1,5 @@
+pub struct Negative<T>(pub T);
+
 pub struct Bytes<T>(pub T);
 
 pub struct BadStr<T>(pub T);

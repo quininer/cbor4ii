@@ -36,11 +36,42 @@ macro_rules! deserialize_type {
 impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializer<R> {
     type Error = dec::Error<R::Error>;
 
-    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
     {
-        todo!()
+        let byte = dec::peek_one(&mut self.reader)?;
+        match byte >> 5 {
+            major::UNSIGNED => self.deserialize_u64(visitor),
+            major::NEGATIVE => self.deserialize_i64(visitor),
+            major::BYTES => self.deserialize_byte_buf(visitor),
+            major::STRING => self.deserialize_string(visitor),
+            major::ARRAY => self.deserialize_seq(visitor),
+            major::MAP => self.deserialize_map(visitor),
+            _ => match byte {
+                marker::FALSE => {
+                    self.reader.advance(1);
+                    visitor.visit_bool(false)
+                },
+                marker::TRUE => {
+                    self.reader.advance(1);
+                    visitor.visit_bool(true)
+                },
+                marker::NULL | marker::UNDEFINED => {
+                    self.reader.advance(1);
+                    visitor.visit_none()
+                },
+                #[cfg(feature = "half-f16")]
+                marker::F16 => {
+                    self.reader.advance(1);
+                    let v = half::f16::decode_with(byte, &mut self.reader)?;
+                    visitor.visit_f32(v.into())
+                },
+                marker::F32 => self.deserialize_f32(visitor),
+                marker::F64 => self.deserialize_f32(visitor),
+                _ => Err(dec::Error::Unsupported { byte })
+            }
+        }
     }
 
     deserialize_type!(

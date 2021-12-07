@@ -81,7 +81,10 @@ pub enum DecodeError<E> {
         expect: usize,
         value: usize
     },
-    InvalidUtf8(core::str::Utf8Error)
+    InvalidUtf8(core::str::Utf8Error),
+    Unsupported {
+        byte: u8
+    }
 }
 
 impl<E> DecodeError<E> {

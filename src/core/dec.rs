@@ -4,6 +4,7 @@ pub use crate::error::DecodeError as Error;
 #[cfg(feature = "use_alloc")]
 use alloc::{ vec::Vec, string::String };
 
+
 pub trait Read<'a> {
     #[cfg(feature = "use_std")]
     type Error: std::error::Error + 'static;
@@ -26,7 +27,6 @@ pub trait Decode<'a>: Sized {
     fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let byte = pull_one(reader)?;
         Self::decode_with(byte, reader)
-
     }
 }
 
@@ -168,6 +168,21 @@ macro_rules! decode_ux {
     }
 }
 
+macro_rules! decode_nx {
+    ( $( $t:ty , $decode_fn:ident );* $( ; )? ) => {
+        $(
+            impl<'a> Decode<'a> for types::Negative<$t> {
+                fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+                    TypeNum::new(!(major::NEGATIVE << 5), byte)
+                        .$decode_fn(reader)
+                        .map(types::Negative)
+                }
+            }
+        )*
+    }
+
+}
+
 macro_rules! decode_ix {
     ( $( $t:ty , $decode_fn:ident );* $( ; )? ) => {
         $(
@@ -198,6 +213,13 @@ macro_rules! decode_ix {
 }
 
 decode_ux! {
+    u8, decode_u8;
+    u16, decode_u16;
+    u32, decode_u32;
+    u64, decode_u64;
+}
+
+decode_nx! {
     u8, decode_u8;
     u16, decode_u16;
     u32, decode_u32;
@@ -407,6 +429,22 @@ impl<'a, T: Decode<'a>> Decode<'a> for Option<T> {
     }
 }
 
+#[cfg(feature = "half-f16")]
+impl<'a> Decode<'a> for half::f16 {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        if byte == marker::F16 {
+            let mut buf = [0; 2];
+            pull_exact(reader, &mut buf)?;
+            Ok(half::f16::from_be_bytes(buf))
+        } else {
+            Err(Error::TypeMismatch {
+                name: "f16",
+                byte
+            })
+        }
+    }
+}
+
 impl<'a> Decode<'a> for f32 {
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         if byte == marker::F32 {
@@ -436,91 +474,3 @@ impl<'a> Decode<'a> for f64 {
         }
     }
 }
-
-
-/*
-pub enum Token {
-    Unsigned(u8),
-    Negative(u8),
-    Bytes(u8),
-    String(u8),
-    Array(u8),
-    Map(u8),
-    Tag(u8),
-    Simple(u8),
-}
-
-pub enum Size {
-    U8,
-    U16,
-    U32,
-    U64
-}
-
-pub enum Type {
-    Null,
-    Undefined,
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-    N8(u8),
-    N16(u16),
-    N32(u32),
-    N64(u64),
-    F16(u16),
-    F32(f32),
-    F64(f64),
-    Bytes(usize),
-    String(usize),
-    Array(usize),
-    Map(usize),
-    Simple(u8),
-    Tag(u64)
-}
-
-macro_rules! lookup {
-    (
-        static $name:ident = [$ty:ty ; $size:expr];
-        $( $( $namespace:ident :: $token:ident )|* => $val:expr ,)*
-        _ => $default:expr $(,)?
-    ) => (
-        static $name: [$ty; $size] = {
-            let default = $default as $ty;
-            let mut table = [default; $size];
-
-            $(
-                let val = $val as $ty;
-                $(
-                    table[$namespace :: $token as usize] = val;
-                )*
-            )*
-
-            table
-        };
-    )
-}
-
-impl Token {
-    fn parse(x: u8) -> Option<Token> {
-        type Parser = fn(u8) -> Option<Token>;
-
-        lookup! {
-            static LUT = [Parser; 8];
-
-            major::UNSIGNED => |x| None,
-            _ => |x| None
-        }
-
-        LUT.get((x >> 5) as usize)?(x)
-    }
-
-    fn want(&self) -> usize {
-        todo!()
-    }
-
-    fn read(&self, input: &[u8]) -> Type {
-        todo!()
-    }
-}
-*/
