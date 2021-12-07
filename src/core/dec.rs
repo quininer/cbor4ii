@@ -151,7 +151,7 @@ impl TypeNum {
                 pull_exact(reader, &mut buf)?;
                 Ok(u64::from_be_bytes(buf))
             },
-            _ => return Err(Error::mismatch(self.major_limit, self.byte))
+            _ => Err(Error::mismatch(self.major_limit, self.byte))
         }
     }
 }
@@ -210,11 +210,6 @@ decode_ix! {
     i32, decode_u32;
     i64, decode_u64;
 }
-
-struct TypeBytes<'a, const TYPE: u8>(&'a [u8]);
-
-#[cfg(feature = "use_alloc")]
-struct TypeBuf<'b, const TYPE: u8>(&'b mut Vec<u8>);
 
 fn decode_bytes<'a, R: Read<'a>>(name: &'static str, major_limit: u8, byte: u8, reader: &mut R)
     -> Result<&'a [u8], Error<R::Error>>
@@ -390,7 +385,7 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
 }
 
 impl<'a> Decode<'a> for bool {
-    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode_with<R: Read<'a>>(byte: u8, _reader: &mut R) -> Result<Self, Error<R::Error>> {
         match byte {
             marker::FALSE => Ok(false),
             marker::TRUE => Ok(true),
@@ -443,7 +438,7 @@ impl<'a> Decode<'a> for f64 {
 }
 
 
-
+/*
 pub enum Token {
     Unsigned(u8),
     Negative(u8),
@@ -528,3 +523,4 @@ impl Token {
         todo!()
     }
 }
+*/

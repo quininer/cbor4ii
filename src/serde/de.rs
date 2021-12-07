@@ -36,7 +36,7 @@ macro_rules! deserialize_type {
 impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializer<R> {
     type Error = dec::Error<R::Error>;
 
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
     {
@@ -134,22 +134,22 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         visitor.visit_newtype_struct(self)
     }
 
-    fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let seq = Accessor::array(&mut self)?;
+        let seq = Accessor::array(self)?;
         visitor.visit_seq(seq)
     }
 
     fn deserialize_tuple<V>(
-        mut self,
+        self,
         len: usize,
         visitor: V
     ) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
     {
-        let seq = Accessor::tuple(&mut self, len)?;
+        let seq = Accessor::tuple(self, len)?;
         visitor.visit_seq(seq)
     }
 
@@ -165,11 +165,11 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         self.deserialize_tuple(len, visitor)
     }
 
-    fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
     {
-        let map = Accessor::map(&mut self)?;
+        let map = Accessor::map(self)?;
         visitor.visit_map(map)
     }
 
@@ -298,13 +298,11 @@ where
             } else {
                 Ok(None)
             }
+        } else if dec::peek_one(&mut self.de.reader)? != marker::BREAK {
+            Ok(Some(seed.deserialize(&mut *self.de)?))
         } else {
-            if dec::peek_one(&mut self.de.reader)? != marker::BREAK {
-                Ok(Some(seed.deserialize(&mut *self.de)?))
-            } else {
-                self.de.reader.advance(1);
-                Ok(None)
-            }
+            self.de.reader.advance(1);
+            Ok(None)
         }
     }
 
@@ -326,13 +324,11 @@ impl<'de, 'a, R: dec::Read<'de>> de::MapAccess<'de> for Accessor<'a, R> {
             } else {
                 Ok(None)
             }
+        } else if dec::peek_one(&mut self.de.reader)? != marker::BREAK {
+            Ok(Some(seed.deserialize(&mut *self.de)?))
         } else {
-            if dec::peek_one(&mut self.de.reader)? != marker::BREAK {
-                Ok(Some(seed.deserialize(&mut *self.de)?))
-            } else {
-                self.de.reader.advance(1);
-                Ok(None)
-            }
+            self.de.reader.advance(1);
+            Ok(None)
         }
     }
 

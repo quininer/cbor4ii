@@ -161,7 +161,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_newtype_variant<T: Serialize + ?Sized>(
         self,
-        name: &'static str,
+        _name: &'static str,
         variant_index: u32,
         _variant: &'static str,
         value: &T
