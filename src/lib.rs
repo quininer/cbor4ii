@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "use_std"), no_std)]
 
+#[cfg(feature = "use_alloc")]
 extern crate alloc;
 
 mod error;

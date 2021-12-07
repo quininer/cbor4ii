@@ -2,9 +2,34 @@ pub mod types;
 pub mod enc;
 mod dec;
 
+#[cfg(feature = "use_alloc")]
 use alloc::{ vec::Vec, boxed::Box, string::String };
 
 
+pub(crate) mod major {
+    pub const UNSIGNED: u8 = 0;
+    pub const NEGATIVE: u8 = 1;
+    pub const BYTES:    u8 = 2;
+    pub const STRING:   u8 = 3;
+    pub const ARRAY:    u8 = 4;
+    pub const MAP:      u8 = 5;
+    pub const TAG:      u8 = 6;
+    pub const SIMPLE:   u8 = 7;
+}
+
+pub(crate) mod marker {
+    pub const START: u8 = 0x1f;
+    pub const FALSE: u8 = 0xf4;
+    pub const TRUE: u8  = 0xf5;
+    pub const NULL: u8  = 0xf6;
+    pub const UNDEFINED: u8 = 0xf7;
+    pub const F16: u8   = 0xf9;
+    pub const F32: u8   = 0xfa;
+    pub const F64: u8   = 0xfb;
+    pub const BREAK: u8   = 0xff;
+}
+
+#[cfg(feature = "use_alloc")]
 #[non_exhaustive]
 pub enum Value {
     Null,
@@ -17,6 +42,7 @@ pub enum Value {
     Tag(u64, Box<Value>)
 }
 
+#[cfg(feature = "use_alloc")]
 impl enc::Encode for Value {
     fn encode<W: enc::Write>(&self, writer: &mut W) -> Result<(), enc::Error<W::Error>> {
         match self {
