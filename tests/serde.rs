@@ -107,6 +107,8 @@ fn test_serialize_compat() {
         str_ref: "hello world"
     };
     assert_test!(test);
+
+    assert_test!(Some(10u32));
 }
 
 #[test]

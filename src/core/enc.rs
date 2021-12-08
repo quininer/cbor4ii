@@ -221,14 +221,6 @@ impl Encode for types::BadStr<&'_ [u8]> {
     }
 }
 
-#[cfg(feature = "bstr")]
-impl Encode for &'_ bstr::BStr {
-    #[inline]
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        types::BadStr(self.as_ref()).encode(writer)
-    }
-}
-
 pub struct StrStart;
 
 impl Encode for StrStart {

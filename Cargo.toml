@@ -13,7 +13,6 @@ serde1 = [ "serde", "use_alloc" ]
 
 [dependencies]
 half = { version = "1", default-features = false, optional = true }
-bstr = { version = "0.2", default-features = false, optional = true }
 serde = { version = "1", default-features = false, optional = true }
 
 [dev-dependencies]
