@@ -72,7 +72,7 @@ fn pull_exact<'a, R: Read<'a>>(reader: &mut R, mut buf: &mut [u8]) -> Result<(),
         }
 
         let len = core::cmp::min(buf.len(), readbuf.len());
-        buf.copy_from_slice(&readbuf[..len]);
+        buf[..len].copy_from_slice(&readbuf[..len]);
         reader.advance(len);
         buf = &mut buf[len..];
     }

@@ -1,9 +1,9 @@
-#![cfg(feature = "use_alloc")]
+#![no_main]
 
 use std::convert::Infallible;
+use libfuzzer_sys::fuzz_target;
 use cbor4ii::core::Value;
 use cbor4ii::core::dec::{ self, Decode };
-
 
 struct SliceReader<'a>(&'a [u8]);
 
@@ -23,22 +23,7 @@ impl<'de> dec::Read<'de> for SliceReader<'de> {
     }
 }
 
-#[test]
-fn test_decode_value() {
-    macro_rules! test {
-        ( @ $bytes:expr ) => {
-            let mut reader = SliceReader($bytes);
-            let _ = Value::decode(&mut reader);
-        };
-        ( $( $bytes:expr );* $( ; )? ) => {
-            $(
-                test!(@ $bytes );
-            )*
-        }
-    }
-
-    test!{
-        &[0x8a];
-        &[0x7a, 0x86];
-    }
-}
+fuzz_target!(|data: &[u8]| {
+    let mut reader = SliceReader(data);
+    let _ = Value::decode(&mut reader);
+});
