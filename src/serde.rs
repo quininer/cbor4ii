@@ -67,14 +67,12 @@ mod slice_reader {
 
         fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
             let len = core::cmp::min(self.0.len(), want);
-
             Ok(dec::Reference::Long(&self.0[..len]))
         }
 
         fn advance(&mut self, n: usize) {
-            debug_assert!(n <= self.0.len());
-
-            self.0 = &self.0[n..];
+            let len = core::cmp::min(self.0.len(), n);
+            self.0 = &self.0[len..];
         }
     }
 

@@ -357,7 +357,7 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
 
         if let Some(len) = decode_len(major::ARRAY, byte, reader)? {
             for _ in 0..len {
-                let value = T::decode_with(byte, reader)?;
+                let value = T::decode(reader)?;
                 arr.push(value);
             }
         } else {
@@ -396,7 +396,7 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
                     break;
                 }
 
-                let k = K::decode(reader)?;
+                let k = K::decode_with(byte, reader)?;
                 let v = V::decode(reader)?;
                 map.push((k, v));
             }

@@ -268,6 +268,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
+        // TODO skip length optimize
         self.deserialize_any(visitor)
     }
 
