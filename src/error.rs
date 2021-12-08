@@ -85,6 +85,7 @@ pub enum DecodeError<E> {
     Unsupported {
         byte: u8
     },
+    RecursionLimit
 }
 
 impl<E> DecodeError<E> {

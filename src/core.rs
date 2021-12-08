@@ -60,9 +60,30 @@ impl enc::Encode for Value {
     }
 }
 
+struct ScopeGuard<'a, T>(&'a mut T, fn(&mut T));
+
+impl<T> ScopeGuard<'_, T> {
+    fn get_mut(&mut self) -> &mut T {
+        &mut self.0
+    }
+}
+
+impl<T> Drop for ScopeGuard<'_, T> {
+    fn drop(&mut self) {
+        (self.1)(self.0);
+    }
+}
+
 #[cfg(feature = "use_alloc")]
 impl<'de> dec::Decode<'de> for Value {
     fn decode_with<R: dec::Read<'de>>(byte: u8, reader: &mut R) -> Result<Self, dec::Error<R::Error>> {
+        if !reader.step_in() {
+            return Err(dec::Error::RecursionLimit);
+        }
+
+        let mut reader = ScopeGuard(reader, |reader| reader.step_out());
+        let reader = reader.get_mut();
+
         match byte >> 5 {
             major::UNSIGNED => u64::decode_with(byte, reader)
                 .map(|i| Value::Integer(i.into())),
