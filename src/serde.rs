@@ -60,22 +60,21 @@ mod slice_reader {
     use crate::core::dec;
     use crate::serde::de;
 
-    struct SliceReader<'a> {
-        buf: &'a [u8],
-        pos: usize
-    }
+    struct SliceReader<'a>(&'a [u8]);
 
     impl<'de> dec::Read<'de> for SliceReader<'de> {
         type Error = Infallible;
 
-        fn fill<'b>(&'b mut self, _want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
-            Ok(dec::Reference::Long(&self.buf[self.pos..]))
+        fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
+            let len = core::cmp::min(self.0.len(), want);
+
+            Ok(dec::Reference::Long(&self.0[..len]))
         }
 
         fn advance(&mut self, n: usize) {
-            debug_assert!(self.pos + n <= self.buf.len());
+            debug_assert!(n <= self.0.len());
 
-            self.pos += 1;
+            self.0 = &self.0[n..];
         }
     }
 
@@ -83,7 +82,7 @@ mod slice_reader {
     where
         T: serde::Deserialize<'a>,
     {
-        let reader = SliceReader { buf, pos: 0 };
+        let reader = SliceReader(buf);
         let mut deserializer = de::Deserializer::new(reader);
         let value = serde::Deserialize::deserialize(&mut deserializer)?;
         Ok(value)

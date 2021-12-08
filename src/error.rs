@@ -84,11 +84,11 @@ pub enum DecodeError<E> {
     InvalidUtf8(core::str::Utf8Error),
     Unsupported {
         byte: u8
-    }
+    },
 }
 
 impl<E> DecodeError<E> {
-    pub const fn mismatch(major_limit: u8, byte: u8) -> Self {
+    pub(crate) const fn mismatch(major_limit: u8, byte: u8) -> Self {
         DecodeError::Mismatch {
             expect_major: (!major_limit) >> 5,
             byte

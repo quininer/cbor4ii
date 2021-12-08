@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "use_std"), no_std)]
+#![feature(backtrace)]
 
 #[cfg(feature = "use_alloc")]
 extern crate alloc;

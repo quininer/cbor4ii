@@ -164,7 +164,7 @@ fn test_serialize_display() {
 struct TupleStruct(String, i32, u64);
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-struct UnitStruct;
+struct U8Struct(u8);
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 struct Struct<'a> {
@@ -173,7 +173,7 @@ struct Struct<'a> {
     map: BTreeMap<String, String>,
     bytes: &'a [u8],
     array: Vec<String>,
-    unit_array: Vec<UnitStruct>,
+    u8_array: Vec<U8Struct>,
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn serde() {
     let bytes = b"test byte string";
 
     let array = vec![format!("one"), format!("two"), format!("three")];
-    let unit_array = vec![UnitStruct, UnitStruct, UnitStruct];
+    let u8_array = vec![U8Struct(0), U8Struct(1), U8Struct(1)];
 
     let data = Struct {
         tuple_struct,
@@ -204,7 +204,7 @@ fn serde() {
         map,
         bytes,
         array,
-        unit_array,
+        u8_array,
     };
 
     let value = serde_cbor::value::to_value(data.clone()).unwrap();

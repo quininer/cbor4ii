@@ -129,7 +129,8 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        self.serialize_none()
+        enc::ArrayStartBounded(0).encode(&mut self.writer)?;
+        Ok(())
     }
 
     #[inline]
@@ -162,12 +163,12 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_newtype_variant<T: Serialize + ?Sized>(
         self,
         _name: &'static str,
-        variant_index: u32,
-        _variant: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
         value: &T
     ) -> Result<Self::Ok, Self::Error> {
         enc::MapStartBounded(1).encode(&mut self.writer)?;
-        variant_index.encode(&mut self.writer)?;
+        variant.encode(&mut self.writer)?;
         value.serialize(self)
     }
 

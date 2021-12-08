@@ -20,7 +20,7 @@ macro_rules! assert_test {
     ( $value:expr ) => {{
         let buf = to_vec(Vec::new(), &$value).unwrap();
         let value = de(&buf, &$value);
-        assert_eq!(value, $value);
+        assert_eq!(value, $value, "{:?}", buf);
     }}
 }
 
@@ -56,7 +56,7 @@ fn test_serialize_compat() {
     struct NewType<T>(T);
 
     #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
-    struct Test {
+    struct Test<'a> {
         name: char,
         test: TestMap,
         #[serde(with = "serde_bytes")]
@@ -65,7 +65,9 @@ fn test_serialize_compat() {
         bytes2: Vec<u8>,
         map: BTreeMap<String, Enum>,
         untag: (UntaggedEnum, UntaggedEnum),
-        new: NewType<UntaggedEnum>
+        new: NewType<UntaggedEnum>,
+        some: Option<()>,
+        str_ref: &'a str
     }
     #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
     struct TestMap(BTreeMap<TestObj, BoxSet>);
@@ -100,7 +102,37 @@ fn test_serialize_compat() {
             map
         },
         untag: (UntaggedEnum::Foo("a".into()), UntaggedEnum::Bar(0)),
-        new: NewType(UntaggedEnum::Foo("???".into()))
+        new: NewType(UntaggedEnum::Foo("???".into())),
+        some: Some(()),
+        str_ref: "hello world"
     };
     assert_test!(test);
+}
+
+#[test]
+fn test_serde_enum_flatten() {
+    #[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
+    pub enum Platform {
+        Amd64,
+    }
+
+    #[derive(Debug, Eq, PartialEq, Deserialize, Serialize)]
+    pub struct Package {
+        #[serde(flatten)]
+        pub flattened: Flattened,
+    }
+
+    #[derive(Debug, Eq, PartialEq, Deserialize, Serialize)]
+    pub struct Flattened {
+        pub platform: Platform
+    }
+
+    let pkg = Package {
+        flattened: Flattened {
+            platform: Platform::Amd64,
+        },
+    };
+    let pkgs = vec![pkg];
+
+    assert_test!(pkgs);
 }

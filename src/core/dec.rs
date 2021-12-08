@@ -32,7 +32,7 @@ pub trait Decode<'a>: Sized {
 
 impl Reference<'_, '_> {
     #[inline]
-    const fn as_ref(&self) -> &[u8] {
+    pub(crate) const fn as_ref(&self) -> &[u8] {
         match self {
             Reference::Long(buf) => buf,
             Reference::Short(buf) => buf
@@ -63,7 +63,7 @@ pub fn pull_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> 
 
 #[inline]
 fn pull_exact<'a, R: Read<'a>>(reader: &mut R, mut buf: &mut [u8]) -> Result<(), Error<R::Error>> {
-    while buf.is_empty() {
+    while !buf.is_empty() {
         let readbuf = reader.fill(buf.len())?;
         let readbuf = readbuf.as_ref();
 
@@ -73,6 +73,7 @@ fn pull_exact<'a, R: Read<'a>>(reader: &mut R, mut buf: &mut [u8]) -> Result<(),
 
         let len = core::cmp::min(buf.len(), readbuf.len());
         buf.copy_from_slice(&readbuf[..len]);
+        reader.advance(len);
         buf = &mut buf[len..];
     }
 
@@ -237,8 +238,10 @@ fn decode_bytes<'a, R: Read<'a>>(name: &'static str, major_limit: u8, byte: u8, 
     let len = usize::try_from(len).map_err(Error::CastOverflow)?;
 
     match reader.fill(len)? {
-        Reference::Long(buf)
-            if buf.len() >= len => Ok(&buf[..len]),
+        Reference::Long(buf) if buf.len() >= len => {
+            reader.advance(len);
+            Ok(&buf[..len])
+        },
         Reference::Long(buf) => Err(Error::RequireLength {
             name,
             expect: len,
@@ -303,7 +306,7 @@ impl<'a> Decode<'a> for types::Bytes<Vec<u8>> {
 
 impl<'a> Decode<'a> for &'a str {
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_bytes("str", !(major::BYTES << 5), byte, reader)?;
+        let buf = decode_bytes("str", !(major::STRING << 5), byte, reader)?;
         core::str::from_utf8(buf).map_err(Error::InvalidUtf8)
     }
 }
@@ -321,7 +324,7 @@ impl<'a> Decode<'a> for String {
 
 impl<'a> Decode<'a> for types::BadStr<&'a [u8]> {
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_bytes("str", !(major::BYTES << 5), byte, reader)?;
+        let buf = decode_bytes("str", !(major::STRING << 5), byte, reader)?;
         Ok(types::BadStr(buf))
     }
 }

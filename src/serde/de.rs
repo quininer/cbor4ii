@@ -92,7 +92,6 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
 
         &str,       deserialize_str,        visit_borrowed_str;
         String,     deserialize_string,     visit_string;
-        Vec<u8>,    deserialize_byte_buf,   visit_byte_buf;
     );
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -125,6 +124,14 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         visitor.visit_borrowed_bytes(value.0)
     }
 
+
+    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where V: Visitor<'de>
+    {
+        let value = <types::Bytes<Vec<u8>>>::decode(&mut self.reader)?;
+        visitor.visit_byte_buf(value.0)
+    }
+
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
@@ -141,7 +148,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where V: Visitor<'de>
     {
         let byte = dec::pull_one(&mut self.reader)?;
-        if byte != marker::NULL && byte != marker::UNDEFINED {
+        if byte == (major::ARRAY << 5) {
             visitor.visit_unit()
         } else {
             Err(dec::Error::TypeMismatch {
@@ -224,7 +231,29 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where
         V: Visitor<'de>
     {
-        let accessor = Accessor::enum_(self)?;
+        let byte = dec::peek_one(&mut self.reader)?;
+        let accessor = match byte >> 5 {
+            major::STRING => EnumAccessor { de: self },
+            major::ARRAY => todo!(),
+            major::MAP => {
+                self.reader.advance(1);
+                let len = dec::decode_len(major::MAP, byte, &mut self.reader)?;
+                if len != Some(1) {
+                    return Err(dec::Error::RequireLength {
+                        name: "enum::map",
+                        expect: 1,
+                        value: len.unwrap_or(0)
+                    });
+                }
+
+                EnumAccessor { de: self }
+            },
+            _ => return Err(dec::Error::TypeMismatch {
+                name: "enum",
+                byte
+            })
+        };
+
         visitor.visit_enum(accessor)
     }
 
@@ -301,17 +330,6 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
         let len = dec::decode_len(major::MAP, byte, &mut de.reader)?;
         Ok(Accessor { de, len })
     }
-
-    pub fn enum_(de: &'a mut Deserializer<R>)
-        -> Result<Accessor<'a, R>, dec::Error<R::Error>>
-    {
-        // TODO handle serialize_unit_variant
-
-        let byte = dec::pull_one(&mut de.reader)?;
-        let len = dec::decode_len(major::MAP, byte, &mut de.reader)?;
-        Ok(Accessor { de, len })
-    }
-
 }
 
 impl<'de, 'a, R> de::SeqAccess<'de> for Accessor<'a, R>
@@ -376,40 +394,34 @@ impl<'de, 'a, R: dec::Read<'de>> de::MapAccess<'de> for Accessor<'a, R> {
     }
 }
 
-impl<'de, 'a, R> de::EnumAccess<'de> for Accessor<'a, R>
+struct EnumAccessor<'a, R> {
+    de: &'a mut Deserializer<R>,
+}
+
+impl<'de, 'a, R> de::EnumAccess<'de> for EnumAccessor<'a, R>
 where
     R: dec::Read<'de>
 {
     type Error = dec::Error<R::Error>;
-    type Variant = Accessor<'a, R>;
+    type Variant = EnumAccessor<'a, R>;
 
-    fn variant_seed<V>(mut self, seed: V)
+    fn variant_seed<V>(self, seed: V)
         -> Result<(V::Value, Self::Variant), Self::Error>
     where V: de::DeserializeSeed<'de>
     {
-        match de::MapAccess::next_key_seed(&mut self, seed)? {
-            Some(variant) => Ok((variant, self)),
-            None => todo!()
-        }
+        let variant = seed.deserialize(&mut *self.de)?;
+        Ok((variant, self))
     }
 }
 
-impl<'de, 'a, R> de::VariantAccess<'de> for Accessor<'a, R>
+impl<'de, 'a, R> de::VariantAccess<'de> for EnumAccessor<'a, R>
 where
     R: dec::Read<'de>
 {
     type Error = dec::Error<R::Error>;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
-        let byte = dec::pull_one(&mut self.de.reader)?;
-        if byte == marker::NULL || byte == marker::UNDEFINED {
-            Ok(())
-        } else {
-            Err(dec::Error::TypeMismatch {
-                name: "enum::unit",
-                byte
-            })
-        }
+        Ok(())
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>
