@@ -237,6 +237,70 @@ decode_ix! {
     i64, decode_u64;
 }
 
+fn decode_x128<'a, R: Read<'a>>(name: &'static str, reader: &mut R) -> Result<[u8; 16], Error<R::Error>> {
+    let byte = pull_one(reader)?;
+    let len = decode_len(major::BYTES, byte, reader)?
+        .ok_or(Error::TypeMismatch { name, byte })?;
+    let mut buf = [0; 16];
+    if let Some(pos) = buf.len().checked_sub(len) {
+        pull_exact(reader, &mut buf[pos..])?;
+        Ok(buf)
+    } else {
+        Err(Error::Overflow { name })
+    }
+}
+
+impl<'a> Decode<'a> for u128 {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        if byte >> 5 == major::UNSIGNED {
+            u64::decode_with(byte, reader).map(Into::into)
+        } else {
+            let tag = TypeNum::new(!(major::TAG << 5), byte).decode_u8(reader)?;
+            if tag == 2 {
+                let buf = decode_x128("u128::bytes", reader)?;
+                Ok(u128::from_be_bytes(buf))
+            } else {
+                Err(Error::TypeMismatch {
+                    name: "u128",
+                    byte: tag
+                })
+            }
+        }
+    }
+}
+
+impl<'a> Decode<'a> for i128 {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        match byte >> 5 {
+            major::UNSIGNED => u64::decode_with(byte, reader).map(Into::into),
+            major::NEGATIVE => i64::decode_with(byte, reader).map(Into::into),
+            _ => {
+                let tag = TypeNum::new(!(major::TAG << 5), byte).decode_u8(reader)?;
+                match tag {
+                    2 => {
+                        let buf = decode_x128("i128<positive>::bytes", reader)?;
+                        let n = u128::from_be_bytes(buf);
+                        let n = i128::try_from(n).map_err(Error::CastOverflow)?;
+                        Ok(n)
+                    },
+                    3 => {
+                        let buf = decode_x128("i128<negative>::bytes", reader)?;
+                        let n = u128::from_be_bytes(buf);
+                        let n = n.checked_add(1)
+                            .ok_or(Error::Overflow { name: "i128" })?;
+                        let n = i128::try_from(n).map_err(Error::CastOverflow)?;
+                        Ok(-n)
+                    },
+                    _ => Err(Error::TypeMismatch {
+                        name: "i128",
+                        byte: tag
+                    })
+                }
+            }
+        }
+    }
+}
+
 fn decode_bytes<'a, R: Read<'a>>(name: &'static str, major_limit: u8, byte: u8, reader: &mut R)
     -> Result<&'a [u8], Error<R::Error>>
 {
@@ -263,15 +327,9 @@ fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, follow: bool, reader: &mut R
 {
     const CAP_LIMIT: usize = 16 * 1024;
 
-    if byte == (marker::START | (major << 5)) {
-        let byte = pull_one(reader)?;
-        decode_buf(major, byte, true, reader, buf)
-    } else if follow && byte == marker::BREAK {
+    if follow && byte == marker::BREAK {
         Ok(())
-    } else {
-        let len = TypeNum::new(!(major << 5), byte).decode_u64(reader)?;
-        let mut len = usize::try_from(len).map_err(Error::CastOverflow)?;
-
+    } else if let Some(mut len) = decode_len(major, byte, reader)? {
         if len <= CAP_LIMIT {
             buf.reserve(len); // TODO try_reserve ?
         }
@@ -291,6 +349,9 @@ fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, follow: bool, reader: &mut R
         }
 
         Ok(())
+    } else {
+        let byte = pull_one(reader)?;
+        decode_buf(major, byte, true, reader, buf)
     }
 }
 

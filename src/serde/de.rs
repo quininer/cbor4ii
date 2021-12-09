@@ -81,11 +81,13 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         i16,        deserialize_i16,        visit_i16;
         i32,        deserialize_i32,        visit_i32;
         i64,        deserialize_i64,        visit_i64;
+        i128,       deserialize_i128,       visit_i128;
 
         u8,         deserialize_u8,         visit_u8;
         u16,        deserialize_u16,        visit_u16;
         u32,        deserialize_u32,        visit_u32;
         u64,        deserialize_u64,        visit_u64;
+        u128,       deserialize_u128,       visit_u128;
 
         f32,        deserialize_f32,        visit_f32;
         f64,        deserialize_f64,        visit_f64;
@@ -270,22 +272,6 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         // TODO skip length optimize
         self.deserialize_any(visitor)
     }
-
-    /*
-    fn deserialize_i128<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: Visitor<'de>,
-    {
-        todo!()
-    }
-
-    fn deserialize_u128<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: Visitor<'de>,
-    {
-        todo!()
-    }
-    */
 
     fn is_human_readable(&self) -> bool {
         false

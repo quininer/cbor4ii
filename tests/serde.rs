@@ -109,6 +109,8 @@ fn test_serialize_compat() {
     assert_test!(test);
 
     assert_test!(Some(10u32));
+
+    assert_test!(Some(vec![(10u128, 99999i128)]));
 }
 
 #[test]
