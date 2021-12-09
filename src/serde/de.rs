@@ -234,7 +234,6 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         let byte = dec::peek_one(&mut self.reader)?;
         let accessor = match byte >> 5 {
             major::STRING => EnumAccessor { de: self },
-            major::ARRAY => todo!(),
             major::MAP => {
                 self.reader.advance(1);
                 let len = dec::decode_len(major::MAP, byte, &mut self.reader)?;
