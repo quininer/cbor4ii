@@ -75,11 +75,13 @@ mod slice_reader {
     impl<'de> dec::Read<'de> for SliceReader<'de> {
         type Error = Infallible;
 
+        #[inline]
         fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
             let len = core::cmp::min(self.0.len(), want);
             Ok(dec::Reference::Long(&self.0[..len]))
         }
 
+        #[inline]
         fn advance(&mut self, n: usize) {
             let len = core::cmp::min(self.0.len(), n);
             self.0 = &self.0[len..];
@@ -107,11 +109,13 @@ mod io_buf_reader {
     impl<'de, R: BufRead> dec::Read<'de> for IoReader<R> {
         type Error = io::Error;
 
+        #[inline]
         fn fill<'b>(&'b mut self, _want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
             let buf = self.0.fill_buf()?;
             Ok(dec::Reference::Short(buf))
         }
 
+        #[inline]
         fn advance(&mut self, n: usize) {
             self.0.consume(n);
         }

@@ -15,10 +15,12 @@ pub trait Read<'a> {
     fn fill<'b>(&'b mut self, want: usize) -> Result<Reference<'a, 'b>, Self::Error>;
     fn advance(&mut self, n: usize);
 
+    #[inline]
     fn step_in(&mut self) -> bool {
         true
     }
 
+    #[inline]
     fn step_out(&mut self) {}
 }
 

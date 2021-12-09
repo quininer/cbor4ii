@@ -22,6 +22,7 @@ impl<R> Deserializer<R> {
 
 macro_rules! deserialize_type {
     ( @ $t:ty , $name:ident , $visit:ident ) => {
+        #[inline]
         fn $name<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where V: Visitor<'de>
         {
@@ -39,6 +40,7 @@ macro_rules! deserialize_type {
 impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializer<R> {
     type Error = dec::Error<R::Error>;
 
+    #[inline]
     fn deserialize_any<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
@@ -309,6 +311,7 @@ struct Accessor<'a, R> {
 }
 
 impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
+    #[inline]
     pub fn array(de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
@@ -317,6 +320,7 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
         Ok(Accessor { de, len })
     }
 
+    #[inline]
     pub fn tuple(de: &'a mut Deserializer<R>, len: usize)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
@@ -334,6 +338,7 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
         }
     }
 
+    #[inline]
     pub fn map(de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
@@ -349,6 +354,7 @@ where
 {
     type Error = dec::Error<R::Error>;
 
+    #[inline]
     fn next_element_seed<T>(&mut self, seed: T)
         -> Result<Option<T::Value>, Self::Error>
     where T: de::DeserializeSeed<'de>
@@ -368,6 +374,7 @@ where
         }
     }
 
+    #[inline]
     fn size_hint(&self) -> Option<usize> {
         self.len
     }
@@ -376,6 +383,7 @@ where
 impl<'de, 'a, R: dec::Read<'de>> de::MapAccess<'de> for Accessor<'a, R> {
     type Error = dec::Error<R::Error>;
 
+    #[inline]
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
     where K: de::DeserializeSeed<'de>
     {
@@ -394,12 +402,14 @@ impl<'de, 'a, R: dec::Read<'de>> de::MapAccess<'de> for Accessor<'a, R> {
         }
     }
 
+    #[inline]
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
     where V: de::DeserializeSeed<'de>
     {
         seed.deserialize(&mut *self.de)
     }
 
+    #[inline]
     fn size_hint(&self) -> Option<usize> {
         self.len
     }
@@ -416,6 +426,7 @@ where
     type Error = dec::Error<R::Error>;
     type Variant = EnumAccessor<'a, R>;
 
+    #[inline]
     fn variant_seed<V>(self, seed: V)
         -> Result<(V::Value, Self::Variant), Self::Error>
     where V: de::DeserializeSeed<'de>
@@ -431,16 +442,19 @@ where
 {
     type Error = dec::Error<R::Error>;
 
+    #[inline]
     fn unit_variant(self) -> Result<(), Self::Error> {
         Ok(())
     }
 
+    #[inline]
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>
     where T: de::DeserializeSeed<'de>
     {
         seed.deserialize(&mut *self.de)
     }
 
+    #[inline]
     fn tuple_variant<V>(self, len: usize, visitor: V)
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
@@ -450,6 +464,7 @@ where
         self.de.deserialize_tuple(len, visitor)
     }
 
+    #[inline]
     fn struct_variant<V>(
         self,
         _fields: &'static [&'static str],
