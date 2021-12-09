@@ -1,9 +1,13 @@
 [package]
 name = "cbor4ii"
 version = "0.1.0"
+authors = ["quininer <quininer@live.com>"]
+description = "CBOR: Concise Binary Object Representation"
+repository = "https://github.com/quininer/cbor4ii"
+categories = [ "encoding", "no-std" ]
+keywords = [ "serde", "cbor", "serialization" ]
+license = "MIT"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 use_std = [ "serde/std", "use_alloc" ]

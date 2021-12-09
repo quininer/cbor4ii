@@ -25,3 +25,7 @@ see https://github.com/pyfisch/cbor/issues/185
 * `cbor4ii` does not support packed mode, and it may be implemented in future,
 but it may not be compatible with `serde_cbor`.
 If you want packed mode, you should look at `bincode`.
+
+# License
+
+This project is licensed under [the MIT license](LICENSE).
