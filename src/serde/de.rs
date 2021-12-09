@@ -105,6 +105,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         String,     deserialize_string,     visit_string;
     );
 
+    #[inline]
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
@@ -128,6 +129,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         }
     }
 
+    #[inline]
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
@@ -136,6 +138,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     }
 
 
+    #[inline]
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
@@ -143,6 +146,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         visitor.visit_byte_buf(value.0)
     }
 
+    #[inline]
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
@@ -155,6 +159,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         }
     }
 
+    #[inline]
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
@@ -169,6 +174,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         }
     }
 
+    #[inline]
     fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V)
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
@@ -176,6 +182,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         self.deserialize_unit(visitor)
     }
 
+    #[inline]
     fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V)
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
@@ -183,6 +190,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         visitor.visit_newtype_struct(self)
     }
 
+    #[inline]
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
@@ -190,6 +198,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         visitor.visit_seq(seq)
     }
 
+    #[inline]
     fn deserialize_tuple<V>(
         self,
         len: usize,
@@ -202,6 +211,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         visitor.visit_seq(seq)
     }
 
+    #[inline]
     fn deserialize_tuple_struct<V>(
         self,
         _name: &'static str,
@@ -214,6 +224,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         self.deserialize_tuple(len, visitor)
     }
 
+    #[inline]
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
@@ -222,6 +233,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         visitor.visit_map(map)
     }
 
+    #[inline]
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
@@ -233,6 +245,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         self.deserialize_map(visitor)
     }
 
+    #[inline]
     fn deserialize_enum<V>(
         self,
         _name: &'static str,
@@ -267,6 +280,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         visitor.visit_enum(accessor)
     }
 
+    #[inline]
     fn deserialize_identifier<V>(self, visitor: V)
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
@@ -274,6 +288,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         self.deserialize_str(visitor)
     }
 
+    #[inline]
     fn deserialize_ignored_any<V>(self, visitor: V)
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
@@ -282,6 +297,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         self.deserialize_any(visitor)
     }
 
+    #[inline]
     fn is_human_readable(&self) -> bool {
         false
     }

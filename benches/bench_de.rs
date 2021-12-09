@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use serde::Serialize;
+use serde::{ Serialize, Deserialize };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Log<'a> {
     level: usize,
     id: u64,
@@ -14,7 +14,7 @@ struct Log<'a> {
     msg: &'a str,
 }
 
-fn bench_ser(c: &mut Criterion) {
+fn bench_de(c: &mut Criterion) {
     let map = {
         let mut map = HashMap::new();
         map.insert("key".into(), "value".into());
@@ -39,34 +39,22 @@ fn bench_ser(c: &mut Criterion) {
         fields: map,
         msg: &msg
     };
+    let buf = cbor4ii::serde::to_vec(Vec::new(), &log).unwrap();
 
-    c.bench_function("cbor4ii-ser", |b| {
-        let mut buf = Vec::new();
-
+    c.bench_function("cbor4ii-de", |b| {
         b.iter(|| {
-            buf.clear();
-            cbor4ii::serde::to_writer(black_box(&mut buf), black_box(&log)).unwrap();
+            let _log: Log = cbor4ii::serde::from_slice(black_box(&buf)).unwrap();
         })
     });
 
-    c.bench_function("serde_cbor-ser", |b| {
-        let mut buf = Vec::new();
-
+    c.bench_function("serde_cbor-de", |b| {
         b.iter(|| {
-            buf.clear();
-            serde_cbor::to_writer(black_box(&mut buf), black_box(&log)).unwrap();
+            let _log: Log = serde_cbor::from_slice(black_box(&buf)).unwrap();
         })
     });
 
-    c.bench_function("ciborium-ser", |b| {
-        let mut buf = Vec::new();
-
-        b.iter(|| {
-            buf.clear();
-            ciborium::ser::into_writer(black_box(&log), black_box(&mut buf)).unwrap();
-        })
-    });
+    // ciborium does not support zero copy decode :(
 }
 
-criterion_group!(ser, bench_ser);
-criterion_main!(ser);
+criterion_group!(de, bench_de);
+criterion_main!(de);
