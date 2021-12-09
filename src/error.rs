@@ -19,7 +19,6 @@ impl<E> From<E> for EncodeError<E> {
 #[cfg(feature = "serde1")]
 #[cfg(feature = "use_std")]
 impl<E: std::error::Error + 'static> serde::ser::Error for EncodeError<E> {
-    #[cold]
     fn custom<T: fmt::Display>(msg: T) -> Self {
         EncodeError::Msg(msg.to_string())
     }
@@ -27,8 +26,8 @@ impl<E: std::error::Error + 'static> serde::ser::Error for EncodeError<E> {
 
 #[cfg(feature = "serde1")]
 #[cfg(not(feature = "use_std"))]
+#[cfg(feature = "use_alloc")]
 impl<E: fmt::Display + fmt::Debug> serde::ser::Error for EncodeError<E> {
-    #[cold]
     fn custom<T: fmt::Display>(msg: T) -> Self {
         use crate::alloc::string::ToString;
 
@@ -114,6 +113,7 @@ impl<E: std::error::Error + 'static> serde::de::Error for DecodeError<E> {
 
 #[cfg(feature = "serde1")]
 #[cfg(not(feature = "use_std"))]
+#[cfg(feature = "use_alloc")]
 impl<E: fmt::Display + fmt::Debug> serde::de::Error for DecodeError<E> {
     #[cold]
     fn custom<T: fmt::Display>(msg: T) -> Self {

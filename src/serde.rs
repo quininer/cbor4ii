@@ -1,4 +1,6 @@
 pub mod ser;
+
+#[cfg(feature = "use_alloc")]
 pub mod de;
 
 #[cfg(feature = "use_std")]
