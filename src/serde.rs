@@ -4,7 +4,6 @@ pub mod de;
 #[cfg(feature = "use_std")]
 mod io_writer {
     use std::io;
-    use std::collections::TryReserveError;
     use serde::Serialize;
     use crate::core::enc;
     use crate::serde::ser;
@@ -30,6 +29,15 @@ mod io_writer {
         let mut writer = ser::Serializer::new(writer);
         value.serialize(&mut writer)
     }
+}
+
+#[cfg(feature = "use_alloc")]
+mod buf_writer {
+    use alloc::vec::Vec;
+    use alloc::collections::TryReserveError;
+    use serde::Serialize;
+    use crate::core::enc;
+    use crate::serde::ser;
 
     struct BufWriter(Vec<u8>);
 
@@ -82,10 +90,43 @@ mod slice_reader {
     {
         let reader = SliceReader(buf);
         let mut deserializer = de::Deserializer::new(reader);
-        let value = serde::Deserialize::deserialize(&mut deserializer)?;
-        Ok(value)
+        serde::Deserialize::deserialize(&mut deserializer)
     }
 }
 
-pub use io_writer::{ to_writer, to_vec };
+#[cfg(feature = "use_std")]
+mod io_buf_reader {
+    use std::io::{ self, BufRead };
+    use crate::core::dec;
+    use crate::serde::de;
+
+    struct IoReader<R>(R);
+
+    impl<'de, R: BufRead> dec::Read<'de> for IoReader<R> {
+        type Error = io::Error;
+
+        fn fill<'b>(&'b mut self, _want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
+            let buf = self.0.fill_buf()?;
+            Ok(dec::Reference::Short(buf))
+        }
+
+        fn advance(&mut self, n: usize) {
+            self.0.consume(n);
+        }
+    }
+
+    pub fn from_reader<T, R>(reader: R) -> Result<T, dec::Error<io::Error>>
+    where
+        T: serde::de::DeserializeOwned,
+        R: BufRead
+    {
+        let reader = IoReader(reader);
+        let mut deserializer = de::Deserializer::new(reader);
+        serde::Deserialize::deserialize(&mut deserializer)
+    }
+}
+
+#[cfg(feature = "use_std")] pub use io_writer::to_writer;
+#[cfg(feature = "use_alloc")] pub use buf_writer::to_vec;
+#[cfg(feature = "use_std")] pub use io_buf_reader::from_reader;
 pub use slice_reader::from_slice;
