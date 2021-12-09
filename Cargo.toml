@@ -24,7 +24,6 @@ serde_cbor = "0.11"
 ciborium = "0.1"
 criterion = "0.3"
 
-
 [[bench]]
 name = "ser"
 path = "benches/bench_ser.rs"

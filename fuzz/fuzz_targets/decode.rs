@@ -32,7 +32,7 @@ impl<'de> dec::Read<'de> for SliceReader<'de> {
 
     fn step_in(&mut self) -> bool {
         let depth = self.depth + 1;
-        if depth <= 124 {
+        if depth <= 256 {
             self.depth = depth;
             true
         } else {
