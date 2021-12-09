@@ -43,7 +43,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where
         V: Visitor<'de>
     {
-        if self.reader.step_in() {
+        if !self.reader.step_in() {
             return Err(dec::Error::RecursionLimit);
         }
         let mut de = ScopeGuard(&mut self, |de| de.reader.step_out());

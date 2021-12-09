@@ -140,3 +140,14 @@ fn test_serde_enum_flatten() {
 
     assert_test!(pkgs);
 }
+
+#[test]
+#[cfg(feature = "serde-value")]
+fn test_serde_value() {
+    use cbor4ii::core::Value;
+
+    assert_test!(Value::Map(vec![(
+        Value::Text("a".into()),
+        Value::Bool(false)
+    )]));
+}

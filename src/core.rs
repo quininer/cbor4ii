@@ -31,6 +31,7 @@ pub(crate) mod marker {
 
 #[cfg_attr(feature = "serde-value", derive(serde::Serialize, serde::Deserialize))]
 #[cfg(feature = "use_alloc")]
+#[derive(Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Value {
     Null,
