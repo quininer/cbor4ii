@@ -29,6 +29,7 @@ pub(crate) mod marker {
     pub const BREAK: u8   = 0xff;
 }
 
+#[cfg_attr(feature = "serde-value", derive(serde::Serialize, serde::Deserialize))]
 #[cfg(feature = "use_alloc")]
 #[non_exhaustive]
 pub enum Value {

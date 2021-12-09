@@ -1,6 +1,9 @@
+use alloc::vec::Vec;
+use alloc::string::String;
 use serde::de::{ self, Visitor };
 use crate::core::{ major, marker, types };
 use crate::core::dec::{ self, Decode };
+use crate::util::ScopeGuard;
 
 
 pub struct Deserializer<R> {
@@ -36,39 +39,45 @@ macro_rules! deserialize_type {
 impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializer<R> {
     type Error = dec::Error<R::Error>;
 
-    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_any<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
     {
-        let byte = dec::peek_one(&mut self.reader)?;
+        if self.reader.step_in() {
+            return Err(dec::Error::RecursionLimit);
+        }
+        let mut de = ScopeGuard(&mut self, |de| de.reader.step_out());
+        let de = de.get_mut();
+
+        let byte = dec::peek_one(&mut de.reader)?;
         match byte >> 5 {
-            major::UNSIGNED => self.deserialize_u64(visitor),
-            major::NEGATIVE => self.deserialize_i64(visitor),
-            major::BYTES => self.deserialize_byte_buf(visitor),
-            major::STRING => self.deserialize_string(visitor),
-            major::ARRAY => self.deserialize_seq(visitor),
-            major::MAP => self.deserialize_map(visitor),
+            major::UNSIGNED => de.deserialize_u64(visitor),
+            major::NEGATIVE => de.deserialize_i64(visitor),
+            major::BYTES => de.deserialize_byte_buf(visitor),
+            major::STRING => de.deserialize_string(visitor),
+            major::ARRAY => de.deserialize_seq(visitor),
+            major::MAP => de.deserialize_map(visitor),
             _ => match byte {
                 marker::FALSE => {
-                    self.reader.advance(1);
+                    de.reader.advance(1);
                     visitor.visit_bool(false)
                 },
                 marker::TRUE => {
-                    self.reader.advance(1);
+                    de.reader.advance(1);
                     visitor.visit_bool(true)
                 },
                 marker::NULL | marker::UNDEFINED => {
-                    self.reader.advance(1);
+                    de.reader.advance(1);
                     visitor.visit_none()
                 },
                 #[cfg(feature = "half-f16")]
                 marker::F16 => {
-                    self.reader.advance(1);
-                    let v = half::f16::decode_with(byte, &mut self.reader)?;
+                    de.reader.advance(1);
+                    let v = half::f16::decode_with(byte, &mut de.reader)?;
                     visitor.visit_f32(v.into())
                 },
-                marker::F32 => self.deserialize_f32(visitor),
-                marker::F64 => self.deserialize_f32(visitor),
+                marker::F32 => de.deserialize_f32(visitor),
+                marker::F64 => de.deserialize_f32(visitor),
                 _ => Err(dec::Error::Unsupported { byte })
             }
         }

@@ -51,7 +51,6 @@ fn test_decode_value() {
     macro_rules! test {
         ( @ $input:expr ) => {
             let buf = data_encoding::BASE64.decode($input.as_bytes()).unwrap();
-            dbg!(&buf);
             let mut reader = SliceReader::new(buf.as_slice());
             let _ = Value::decode(&mut reader);
         };

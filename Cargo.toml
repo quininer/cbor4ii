@@ -7,9 +7,10 @@ edition = "2021"
 
 [features]
 use_std = [ "serde/std", "use_alloc" ]
-use_alloc = []
+use_alloc = [ "serde/alloc" ]
 half-f16 = [ "half" ]
 serde1 = [ "serde", "use_alloc" ]
+serde-value = [ "serde1", "serde/derive" ]
 
 [dependencies]
 half = { version = "1", default-features = false, optional = true }

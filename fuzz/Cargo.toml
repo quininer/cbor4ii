@@ -13,7 +13,7 @@ libfuzzer-sys = "0.4"
 
 [dependencies.cbor4ii]
 path = ".."
-features = [ "use_alloc" ]
+features = [ "use_alloc", "serde-value" ]
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -25,5 +25,11 @@ debug = true
 [[bin]]
 name = "decode"
 path = "fuzz_targets/decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "de"
+path = "fuzz_targets/de.rs"
 test = false
 doc = false
