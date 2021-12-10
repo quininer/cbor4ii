@@ -151,3 +151,10 @@ fn test_serde_value() {
         Value::Bool(false)
     )]));
 }
+
+#[test]
+fn test_serde_cow() {
+    use std::borrow::Cow;
+
+    assert_test!(Cow::Borrowed("123"));
+}
