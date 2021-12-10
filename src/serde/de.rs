@@ -1,6 +1,5 @@
 use alloc::vec::Vec;
 use alloc::string::String;
-use core::convert::TryFrom;
 use serde::de::{ self, Visitor };
 use crate::core::{ major, marker, types };
 use crate::core::dec::{ self, Decode };
@@ -305,21 +304,21 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
                 };
                 skip_exact(&mut de.reader, skip)?;
             },
-            major @ major::BYTES | major @ major::STRING => {
-                de.reader.advance(1);
-                let len = dec::TypeNum::new(!(major << 5), byte).decode_u64(&mut de.reader)?;
-                let len = usize::try_from(len).map_err(dec::Error::CastOverflow)?;
-                skip_exact(&mut de.reader, len)?;
-            },
+            major @ major::BYTES | major @ major::STRING |
             major @ major::ARRAY | major @ major::MAP => {
                 de.reader.advance(1);
-                if let Some(len) = dec::decode_len(major, byte, &mut de.reader)? {
-                    for _ in 0..len {
-                        de.deserialize_ignored_any(de::IgnoredAny)?;
 
-                        if major == major::MAP {
+                if let Some(len) = dec::decode_len(major, byte, &mut de.reader)? {
+                    match major {
+                        major::BYTES | major::STRING => skip_exact(&mut de.reader, len)?,
+                        major::ARRAY | major::MAP => for _ in 0..len {
                             de.deserialize_ignored_any(de::IgnoredAny)?;
-                        }
+
+                            if major == major::MAP {
+                                de.deserialize_ignored_any(de::IgnoredAny)?;
+                            }
+                        },
+                        _ => ()
                     }
                 } else {
                     while dec::peek_one(&mut de.reader)? != marker::BREAK {
