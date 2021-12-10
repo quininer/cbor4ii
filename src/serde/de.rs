@@ -20,6 +20,16 @@ impl<R> Deserializer<R> {
     }
 }
 
+impl<'de, R: dec::Read<'de>> Deserializer<R> {
+    fn try_step(&mut self) -> Result<ScopeGuard<'_, Self>, dec::Error<R::Error>> {
+        if self.reader.step_in() {
+            Ok(ScopeGuard(self, |de| de.reader.step_out()))
+        } else {
+            Err(dec::Error::RecursionLimit)
+        }
+    }
+}
+
 macro_rules! deserialize_type {
     ( @ $t:ty , $name:ident , $visit:ident ) => {
         #[inline]
@@ -41,15 +51,12 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     type Error = dec::Error<R::Error>;
 
     #[inline]
-    fn deserialize_any<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
     {
-        if !self.reader.step_in() {
-            return Err(dec::Error::RecursionLimit);
-        }
-        let mut de = ScopeGuard(&mut self, |de| de.reader.step_out());
-        let de = de.get_mut();
+        let mut de = self.try_step()?;
+        let de = &mut *de;
 
         let byte = dec::peek_one(&mut de.reader)?;
         match byte >> 5 {
@@ -154,7 +161,8 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     {
         let byte = dec::peek_one(&mut self.reader)?;
         if byte != marker::NULL && byte != marker::UNDEFINED {
-            visitor.visit_some(self)
+            let mut de = self.try_step()?;
+            visitor.visit_some(&mut *de)
         } else {
             self.reader.advance(1);
             visitor.visit_none()
@@ -196,7 +204,8 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let seq = Accessor::array(self)?;
+        let mut de = self.try_step()?;
+        let seq = Accessor::array(&mut de)?;
         visitor.visit_seq(seq)
     }
 
@@ -209,7 +218,8 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where
         V: Visitor<'de>
     {
-        let seq = Accessor::tuple(self, len)?;
+        let mut de = self.try_step()?;
+        let seq = Accessor::tuple(&mut de, len)?;
         visitor.visit_seq(seq)
     }
 
@@ -231,7 +241,8 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where
         V: Visitor<'de>
     {
-        let map = Accessor::map(self)?;
+        let mut de = self.try_step()?;
+        let map = Accessor::map(&mut de)?;
         visitor.visit_map(map)
     }
 
@@ -257,28 +268,8 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where
         V: Visitor<'de>
     {
-        let byte = dec::peek_one(&mut self.reader)?;
-        let accessor = match byte >> 5 {
-            major::STRING => EnumAccessor { de: self },
-            major::MAP => {
-                self.reader.advance(1);
-                let len = dec::decode_len(major::MAP, byte, &mut self.reader)?;
-                if len != Some(1) {
-                    return Err(dec::Error::RequireLength {
-                        name: "enum::map",
-                        expect: 1,
-                        value: len.unwrap_or(0)
-                    });
-                }
-
-                EnumAccessor { de: self }
-            },
-            _ => return Err(dec::Error::TypeMismatch {
-                name: "enum",
-                byte
-            })
-        };
-
+        let mut de = self.try_step()?;
+        let accessor = EnumAccessor::enum_(&mut de)?;
         visitor.visit_enum(accessor)
     }
 
@@ -295,8 +286,58 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        // TODO skip length optimize
-        self.deserialize_any(visitor)
+        let mut de = self.try_step()?;
+        let byte = dec::peek_one(&mut de.reader)?;
+
+        match byte >> 5 {
+            major @ major::UNSIGNED | major @ major::NEGATIVE => {
+                let skip = match byte & !(major << 5) {
+                    0 ..= 0x17 => 1,
+                    0x18 => 2,
+                    0x19 => 3,
+                    0x1a => 5,
+                    0x1b => 9,
+                    _ => return Err(dec::Error::TypeMismatch {
+                        name: "any",
+                        byte
+                    })
+                };
+                de.reader.advance(skip);
+            },
+            major @ major::BYTES | major @ major::STRING => {
+                de.reader.advance(1);
+                let len = dec::TypeNum::new(!(major << 5), byte).decode_u64(&mut de.reader)?;
+                let len = usize::try_from(len).map_err(dec::Error::CastOverflow)?;
+                de.reader.advance(len);
+            },
+            major @ major::ARRAY | major @ major::MAP => {
+                de.reader.advance(1);
+                if let Some(len) = dec::decode_len(major, byte, &mut de.reader)? {
+                    for _ in 0..len {
+                        de.deserialize_ignored_any(de::IgnoredAny)?;
+
+                        if major == major::MAP {
+                            de.deserialize_ignored_any(de::IgnoredAny)?;
+                        }
+                    }
+                } else {
+                    while dec::peek_one(&mut de.reader)? != marker::BREAK {
+                        de.deserialize_ignored_any(de::IgnoredAny)?;
+
+                        if major == major::MAP {
+                            de.deserialize_ignored_any(de::IgnoredAny)?;
+                        }
+                    }
+                }
+            },
+            major @ major::TAG => {
+                let _tag = dec::TypeNum::new(!(major << 5), byte).decode_u8(&mut de.reader)?;
+                de.deserialize_ignored_any(de::IgnoredAny)?;
+            },
+            _ => return de.deserialize_any(visitor)
+        }
+
+        visitor.visit_unit()
     }
 
     #[inline]
@@ -417,6 +458,35 @@ impl<'de, 'a, R: dec::Read<'de>> de::MapAccess<'de> for Accessor<'a, R> {
 
 struct EnumAccessor<'a, R> {
     de: &'a mut Deserializer<R>,
+}
+
+impl<'de, 'a, R: dec::Read<'de>> EnumAccessor<'a, R> {
+    #[inline]
+    pub fn enum_(de: &'a mut Deserializer<R>)
+        -> Result<EnumAccessor<'a, R>, dec::Error<R::Error>>
+    {
+        let byte = dec::peek_one(&mut de.reader)?;
+        match byte >> 5 {
+            major::STRING => Ok(EnumAccessor { de }),
+            major::MAP => {
+                de.reader.advance(1);
+                let len = dec::decode_len(major::MAP, byte, &mut de.reader)?;
+                if len != Some(1) {
+                    return Err(dec::Error::RequireLength {
+                        name: "enum::map",
+                        expect: 1,
+                        value: len.unwrap_or(0)
+                    });
+                }
+
+                Ok(EnumAccessor { de })
+            },
+            _ => return Err(dec::Error::TypeMismatch {
+                name: "enum",
+                byte
+            })
+        }
+    }
 }
 
 impl<'de, 'a, R> de::EnumAccess<'de> for EnumAccessor<'a, R>

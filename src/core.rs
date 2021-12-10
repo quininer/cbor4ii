@@ -72,7 +72,7 @@ impl<'de> dec::Decode<'de> for Value {
         }
 
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());
-        let reader = reader.get_mut();
+        let reader = &mut *reader;
 
         match byte >> 5 {
             major::UNSIGNED => u64::decode_with(byte, reader)

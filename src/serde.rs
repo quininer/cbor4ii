@@ -70,21 +70,39 @@ mod slice_reader {
     use crate::core::dec;
     use crate::serde::de;
 
-    struct SliceReader<'a>(&'a [u8]);
+    struct SliceReader<'a> {
+        buf: &'a [u8],
+        limit: usize
+    }
 
     impl<'de> dec::Read<'de> for SliceReader<'de> {
         type Error = Infallible;
 
         #[inline]
         fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
-            let len = core::cmp::min(self.0.len(), want);
-            Ok(dec::Reference::Long(&self.0[..len]))
+            let len = core::cmp::min(self.buf.len(), want);
+            Ok(dec::Reference::Long(&self.buf[..len]))
         }
 
         #[inline]
         fn advance(&mut self, n: usize) {
-            let len = core::cmp::min(self.0.len(), n);
-            self.0 = &self.0[len..];
+            let len = core::cmp::min(self.buf.len(), n);
+            self.buf = &self.buf[len..];
+        }
+
+        #[inline]
+        fn step_in(&mut self) -> bool {
+            if let Some(limit) = self.limit.checked_sub(1) {
+                self.limit = limit;
+                true
+            } else {
+                false
+            }
+        }
+
+        #[inline]
+        fn step_out(&mut self) {
+            self.limit += 1;
         }
     }
 
@@ -92,7 +110,7 @@ mod slice_reader {
     where
         T: serde::Deserialize<'a>,
     {
-        let reader = SliceReader(buf);
+        let reader = SliceReader { buf, limit: 256 };
         let mut deserializer = de::Deserializer::new(reader);
         serde::Deserialize::deserialize(&mut deserializer)
     }
@@ -104,20 +122,38 @@ mod io_buf_reader {
     use crate::core::dec;
     use crate::serde::de;
 
-    struct IoReader<R>(R);
+    struct IoReader<R> {
+        reader: R,
+        limit: usize
+    }
 
     impl<'de, R: BufRead> dec::Read<'de> for IoReader<R> {
         type Error = io::Error;
 
         #[inline]
         fn fill<'b>(&'b mut self, _want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
-            let buf = self.0.fill_buf()?;
+            let buf = self.reader.fill_buf()?;
             Ok(dec::Reference::Short(buf))
         }
 
         #[inline]
         fn advance(&mut self, n: usize) {
-            self.0.consume(n);
+            self.reader.consume(n);
+        }
+
+        #[inline]
+        fn step_in(&mut self) -> bool {
+            if let Some(limit) = self.limit.checked_sub(1) {
+                self.limit = limit;
+                true
+            } else {
+                false
+            }
+        }
+
+        #[inline]
+        fn step_out(&mut self) {
+            self.limit += 1;
         }
     }
 
@@ -126,7 +162,7 @@ mod io_buf_reader {
         T: serde::de::DeserializeOwned,
         R: BufRead
     {
-        let reader = IoReader(reader);
+        let reader = IoReader { reader, limit: 256 };
         let mut deserializer = de::Deserializer::new(reader);
         serde::Deserialize::deserialize(&mut deserializer)
     }

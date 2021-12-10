@@ -50,7 +50,7 @@ impl Reference<'_, '_> {
 }
 
 #[inline]
-pub fn peek_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
+pub(crate) fn peek_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
     let b = reader.fill(1)?
         .as_ref()
         .get(0)
@@ -60,7 +60,7 @@ pub fn peek_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> 
 }
 
 #[inline]
-pub fn pull_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
+pub(crate) fn pull_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
     let b = reader.fill(1)?
         .as_ref()
         .get(0)
@@ -89,18 +89,19 @@ fn pull_exact<'a, R: Read<'a>>(reader: &mut R, mut buf: &mut [u8]) -> Result<(),
     Ok(())
 }
 
-struct TypeNum {
+pub(crate) struct TypeNum {
     major_limit: u8,
     byte: u8
 }
 
 impl TypeNum {
-    const fn new(major_limit: u8, byte: u8) -> TypeNum {
+    #[inline]
+    pub(crate) const fn new(major_limit: u8, byte: u8) -> TypeNum {
         TypeNum { major_limit, byte }
     }
 
     #[inline]
-    fn decode_u8<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u8, Error<R::Error>> {
+    pub(crate) fn decode_u8<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u8, Error<R::Error>> {
         match self.byte & self.major_limit {
             x @ 0 ..= 0x17 => Ok(x),
             0x18 => pull_one(reader),
@@ -143,7 +144,7 @@ impl TypeNum {
     }
 
     #[inline]
-    fn decode_u64<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u64, Error<R::Error>> {
+    pub(crate) fn decode_u64<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u64, Error<R::Error>> {
         match self.byte & self.major_limit {
             x @ 0 ..= 0x17 => Ok(x.into()),
             0x18 => pull_one(reader).map(Into::into),
@@ -427,7 +428,7 @@ impl<'a> Decode<'a> for types::BadStr<Vec<u8>> {
 }
 
 #[inline]
-pub fn decode_len<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R)
+pub(crate) fn decode_len<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R)
     -> Result<Option<usize>, Error<R::Error>>
 {
     if byte != (marker::START | (major << 5)) {
@@ -446,6 +447,10 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
         let mut arr = Vec::new();
 
         if let Some(len) = decode_len(major::ARRAY, byte, reader)? {
+            if len <= 256 {
+                arr.reserve(len); // TODO try_reserve ?
+            }
+
             for _ in 0..len {
                 let value = T::decode(reader)?;
                 arr.push(value);
@@ -474,6 +479,10 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
         let mut map = Vec::new();
 
         if let Some(len) = decode_len(major::MAP, byte, reader)? {
+            if len <= 256 {
+                map.reserve(len); // TODO try_reserve ?
+            }
+
             for _ in 0..len {
                 let k = K::decode(reader)?;
                 let v = V::decode(reader)?;

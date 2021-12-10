@@ -1,8 +1,20 @@
+use core::ops::{ Deref, DerefMut };
+
+
 pub struct ScopeGuard<'a, T>(pub &'a mut T, pub fn(&mut T));
 
-impl<T> ScopeGuard<'_, T> {
+impl<T> Deref for ScopeGuard<'_, T> {
+    type Target = T;
+
     #[inline]
-    pub fn get_mut(&mut self) -> &mut T {
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for ScopeGuard<'_, T> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }

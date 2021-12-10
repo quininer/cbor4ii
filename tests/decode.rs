@@ -7,42 +7,43 @@ use cbor4ii::core::dec::{ self, Decode };
 
 struct SliceReader<'a> {
     buf: &'a [u8],
-    depth: usize
+    limit: usize
 }
 
 impl SliceReader<'_> {
     fn new(buf: &[u8]) -> SliceReader<'_> {
-        SliceReader { buf, depth: 0 }
+        SliceReader { buf, limit: 256 }
     }
 }
 
 impl<'de> dec::Read<'de> for SliceReader<'de> {
     type Error = Infallible;
 
+    #[inline]
     fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
-        let len = std::cmp::min(self.buf.len(), want);
-
+        let len = core::cmp::min(self.buf.len(), want);
         Ok(dec::Reference::Long(&self.buf[..len]))
     }
 
+    #[inline]
     fn advance(&mut self, n: usize) {
-        debug_assert!(n <= self.buf.len());
-
-        self.buf = &self.buf[n..];
+        let len = core::cmp::min(self.buf.len(), n);
+        self.buf = &self.buf[len..];
     }
 
+    #[inline]
     fn step_in(&mut self) -> bool {
-        let depth = self.depth + 1;
-        if depth <= 256 {
-            self.depth = depth;
+        if let Some(limit) = self.limit.checked_sub(1) {
+            self.limit = limit;
             true
         } else {
             false
         }
     }
 
+    #[inline]
     fn step_out(&mut self) {
-        self.depth -= 1;
+        self.limit += 1;
     }
 }
 
