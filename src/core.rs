@@ -68,7 +68,7 @@ impl<'de> dec::Decode<'de> for Value {
         use crate::util::ScopeGuard;
 
         if !reader.step_in() {
-            return Err(dec::Error::RecursionLimit);
+            return Err(dec::Error::DepthLimit);
         }
 
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());

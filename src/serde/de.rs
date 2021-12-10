@@ -25,7 +25,7 @@ impl<'de, R: dec::Read<'de>> Deserializer<R> {
         if self.reader.step_in() {
             Ok(ScopeGuard(self, |de| de.reader.step_out()))
         } else {
-            Err(dec::Error::RecursionLimit)
+            Err(dec::Error::DepthLimit)
         }
     }
 }
