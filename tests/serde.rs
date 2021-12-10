@@ -158,3 +158,25 @@ fn test_serde_cow() {
 
     assert_test!(Cow::Borrowed("123"));
 }
+
+#[test]
+fn test_serde_skip() {
+    #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+    struct SkipIt {
+        a: Option<u8>,
+        #[serde(skip_deserializing)]
+        b: Option<u8>,
+        c: Option<u8>
+    }
+
+    let skipit = SkipIt {
+        a: Some(0x1),
+        b: Some(0xff),
+        c: Some(0xfb)
+    };
+    let buf = to_vec(Vec::new(), &skipit).unwrap();
+    let value = de(&buf, &skipit);
+    assert_eq!(value.a, skipit.a);
+    assert_eq!(value.b, None);
+    assert_eq!(value.c, skipit.c);
+}

@@ -303,13 +303,13 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
                         byte
                     })
                 };
-                de.reader.advance(skip);
+                skip_exact(&mut de.reader, skip)?;
             },
             major @ major::BYTES | major @ major::STRING => {
                 de.reader.advance(1);
                 let len = dec::TypeNum::new(!(major << 5), byte).decode_u64(&mut de.reader)?;
                 let len = usize::try_from(len).map_err(dec::Error::CastOverflow)?;
-                de.reader.advance(len);
+                skip_exact(&mut de.reader, len)?;
             },
             major @ major::ARRAY | major @ major::MAP => {
                 de.reader.advance(1);
@@ -547,4 +547,18 @@ where
 
         self.de.deserialize_map(visitor)
     }
+}
+
+#[inline]
+fn skip_exact<'de, R: dec::Read<'de>>(reader: &mut R, mut len: usize) -> Result<(), R::Error> {
+    while len != 0 {
+        let buf = reader.fill(len)?;
+        let buf = buf.as_ref();
+
+        let buflen = core::cmp::min(len, buf.len());
+        reader.advance(buflen);
+        len -= buflen;
+    }
+
+    Ok(())
 }
