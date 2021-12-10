@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use alloc::string::String;
+use core::convert::TryFrom;
 use serde::de::{ self, Visitor };
 use crate::core::{ major, marker, types };
 use crate::core::dec::{ self, Decode };

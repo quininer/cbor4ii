@@ -7,7 +7,7 @@ repository = "https://github.com/quininer/cbor4ii"
 categories = [ "encoding", "no-std" ]
 keywords = [ "serde", "cbor", "serialization" ]
 license = "MIT"
-edition = "2021"
+edition = "2018"
 
 [features]
 use_std = [ "serde/std", "use_alloc" ]
@@ -28,6 +28,9 @@ data-encoding = "2"
 serde_cbor = "0.11"
 ciborium = "0.2"
 criterion = "0.3"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [[bench]]
 name = "ser"

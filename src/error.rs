@@ -1,7 +1,6 @@
 use core::fmt;
 use core::num::TryFromIntError;
 
-
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum EncodeError<E> {
@@ -17,17 +16,7 @@ impl<E> From<E> for EncodeError<E> {
 }
 
 #[cfg(feature = "serde1")]
-#[cfg(feature = "use_std")]
-impl<E: std::error::Error + 'static> serde::ser::Error for EncodeError<E> {
-    fn custom<T: fmt::Display>(msg: T) -> Self {
-        EncodeError::Msg(msg.to_string())
-    }
-}
-
-#[cfg(feature = "serde1")]
-#[cfg(not(feature = "use_std"))]
-#[cfg(feature = "use_alloc")]
-impl<E: fmt::Display + fmt::Debug> serde::ser::Error for EncodeError<E> {
+impl<E: fmt::Debug> serde::ser::Error for EncodeError<E> {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         use crate::alloc::string::ToString;
 
@@ -45,6 +34,10 @@ impl<E: std::error::Error + 'static> std::error::Error for EncodeError<E> {
         }
     }
 }
+
+#[cfg(feature = "serde1")]
+#[cfg(not(feature = "use_std"))]
+impl<E: fmt::Debug> serde::ser::StdError for EncodeError<E> {}
 
 impl<E: fmt::Debug> fmt::Display for EncodeError<E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -103,17 +96,7 @@ impl<E> From<E> for DecodeError<E> {
 }
 
 #[cfg(feature = "serde1")]
-#[cfg(feature = "use_std")]
-impl<E: std::error::Error + 'static> serde::de::Error for DecodeError<E> {
-    fn custom<T: fmt::Display>(msg: T) -> Self {
-        DecodeError::Msg(msg.to_string())
-    }
-}
-
-#[cfg(feature = "serde1")]
-#[cfg(not(feature = "use_std"))]
-#[cfg(feature = "use_alloc")]
-impl<E: fmt::Display + fmt::Debug> serde::de::Error for DecodeError<E> {
+impl<E: fmt::Debug> serde::de::Error for DecodeError<E> {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         use crate::alloc::string::ToString;
 
@@ -132,6 +115,10 @@ impl<E: std::error::Error + 'static> std::error::Error for DecodeError<E> {
         }
     }
 }
+
+#[cfg(feature = "serde1")]
+#[cfg(not(feature = "use_std"))]
+impl<E: fmt::Debug> serde::ser::StdError for DecodeError<E> {}
 
 impl<E: fmt::Debug> fmt::Display for DecodeError<E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

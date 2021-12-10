@@ -1,5 +1,6 @@
-pub use crate::error::EncodeError as Error;
+use core::convert::TryFrom;
 use crate::core::{ types, major, marker };
+pub use crate::error::EncodeError as Error;
 
 
 pub trait Write {

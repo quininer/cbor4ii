@@ -1,3 +1,4 @@
+use core::convert::TryFrom;
 use crate::core::{ major, marker, types };
 pub use crate::error::DecodeError as Error;
 
