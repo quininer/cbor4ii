@@ -507,6 +507,23 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
     }
 }
 
+impl<'a, T: Decode<'a>> Decode<'a> for types::Tag<T> {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let tag = TypeNum::new(!(major::TAG << 5), byte).decode_u64(reader)?;
+        let value = T::decode(reader)?;
+        Ok(types::Tag(tag, value))
+    }
+}
+
+impl<'a> Decode<'a> for types::Simple {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let n = TypeNum::new(!(major::SIMPLE << 5), byte).decode_u8(reader)?;
+        Ok(types::Simple(n))
+    }
+}
+
 impl<'a> Decode<'a> for bool {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, _reader: &mut R) -> Result<Self, Error<R::Error>> {
@@ -533,19 +550,28 @@ impl<'a, T: Decode<'a>> Decode<'a> for Option<T> {
 }
 
 #[cfg(feature = "half-f16")]
-impl<'a> Decode<'a> for half::f16 {
+impl<'a> Decode<'a> for types::F16 {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         if byte == marker::F16 {
             let mut buf = [0; 2];
             pull_exact(reader, &mut buf)?;
-            Ok(half::f16::from_be_bytes(buf))
+            Ok(types::F16(u16::from_be_bytes(buf)))
         } else {
             Err(Error::TypeMismatch {
                 name: "f16",
                 byte
             })
         }
+    }
+}
+
+#[cfg(feature = "half-f16")]
+impl<'a> Decode<'a> for half::f16 {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let types::F16(n) = types::F16::decode_with(byte, reader)?;
+        Ok(half::f16::from_bits(n))
     }
 }
 

@@ -19,10 +19,10 @@ pub(crate) mod major {
 
 pub(crate) mod marker {
     pub const START: u8 = 0x1f;
-    pub const FALSE: u8 = 0xf4;
-    pub const TRUE: u8  = 0xf5;
-    pub const NULL: u8  = 0xf6;
-    pub const UNDEFINED: u8 = 0xf7;
+    pub const FALSE: u8 = 0xf4; // simple(20)
+    pub const TRUE: u8  = 0xf5; // simple(21)
+    pub const NULL: u8  = 0xf6; // simple(22)
+    pub const UNDEFINED: u8 = 0xf7; // simple(23)
     pub const F16: u8   = 0xf9;
     pub const F32: u8   = 0xfa;
     pub const F64: u8   = 0xfb;
