@@ -143,7 +143,7 @@ fn test_serde_enum_flatten() {
 }
 
 #[test]
-#[cfg(feature = "serde-value")]
+#[cfg(feature = "serde1-value")]
 fn test_serde_value() {
     use cbor4ii::core::Value;
 
@@ -179,7 +179,7 @@ fn test_serde_cow() {
         }
     }
 
-    pub fn from_slice<'a, T>(buf: &'a [u8]) -> Result<T, dec::Error<Infallible>>
+    pub fn short_from_slice<'a, T>(buf: &'a [u8]) -> Result<T, dec::Error<Infallible>>
     where
         T: serde::Deserialize<'a>,
     {
@@ -211,12 +211,20 @@ fn test_serde_cow() {
     let input = "1234567";
     let buf = to_vec(Vec::new(), &input).unwrap();
 
+    // real cow str ok
+    let value: CowStr = cbor4ii::serde::from_slice(&buf).unwrap();
+    if let CowStr::Borrowed(s) = value {
+        assert_eq!(input, s);
+    } else {
+        panic!()
+    }
+
     // real cow str
-    let value: CowStr = from_slice(&buf).unwrap();
+    let value: CowStr = short_from_slice(&buf).unwrap();
     assert_eq!(input, value.as_ref(), "{:?}", buf);
 
     // owned str
-    let value: Cow<str> = from_slice(&buf).unwrap();
+    let value: Cow<str> = short_from_slice(&buf).unwrap();
     assert_eq!(input, value.as_ref(), "{:?}", buf);
 }
 

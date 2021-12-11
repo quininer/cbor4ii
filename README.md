@@ -26,6 +26,24 @@ see https://github.com/pyfisch/cbor/issues/185
 but it may not be compatible with `serde_cbor`.
 If you want packed mode, you should look at `bincode`.
 
+## Performance
+
+It is not specifically optimized for performance in implementation,
+but benchmarks shows that its performance is slightly better than `serde_cbor`.
+
+And it supports zero-copy deserialization and `deserialize_ignored_any` of serde,
+so in some scenarios it may perform better than crate that do not support such feature.
+
+## Robustness
+
+The decode part has been fuzz tested,
+and it should not crash or panic during the decoding process.
+
+The decode of serde module has a depth limit
+to prevent stack overflow or OOM caused by specially constructed input.
+If you want to turn off deep inspection or adjust parameters,
+you can implement the `dec::Read` trait yourself.
+
 # License
 
 This project is licensed under [the MIT license](LICENSE).
