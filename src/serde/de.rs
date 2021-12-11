@@ -1,5 +1,4 @@
-use alloc::vec::Vec;
-use alloc::string::String;
+use alloc::borrow::Cow;
 use serde::de::{ self, Visitor };
 use crate::core::{ major, marker, types };
 use crate::core::dec::{ self, Decode };
@@ -109,9 +108,6 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
 
         f32,        deserialize_f32,        visit_f32;
         f64,        deserialize_f64,        visit_f64;
-
-        &str,       deserialize_str,        visit_borrowed_str;
-        String,     deserialize_string,     visit_string;
     );
 
     #[inline]
@@ -142,17 +138,34 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let value = <types::Bytes<&[u8]>>::decode(&mut self.reader)?;
-        visitor.visit_borrowed_bytes(value.0)
+        match <types::Bytes<Cow<[u8]>>>::decode(&mut self.reader)?.0 {
+            Cow::Borrowed(buf) => visitor.visit_borrowed_bytes(buf),
+            Cow::Owned(buf) => visitor.visit_byte_buf(buf)
+        }
     }
-
 
     #[inline]
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let value = <types::Bytes<Vec<u8>>>::decode(&mut self.reader)?;
-        visitor.visit_byte_buf(value.0)
+        self.deserialize_bytes(visitor)
+    }
+
+    #[inline]
+    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where V: Visitor<'de>
+    {
+        match <Cow<str>>::decode(&mut self.reader)? {
+            Cow::Borrowed(buf) => visitor.visit_borrowed_str(buf),
+            Cow::Owned(buf) => visitor.visit_string(buf)
+        }
+    }
+
+    #[inline]
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where V: Visitor<'de>
+    {
+        self.deserialize_str(visitor)
     }
 
     #[inline]
@@ -471,15 +484,15 @@ impl<'de, 'a, R: dec::Read<'de>> EnumAccessor<'a, R> {
             major::MAP => {
                 de.reader.advance(1);
                 let len = dec::decode_len(major::MAP, byte, &mut de.reader)?;
-                if len != Some(1) {
+                if len == Some(1) {
+                    Ok(EnumAccessor { de })
+                } else {
                     return Err(dec::Error::RequireLength {
                         name: "enum::map",
                         expect: 1,
                         value: len.unwrap_or(0)
                     });
                 }
-
-                Ok(EnumAccessor { de })
             },
             _ => return Err(dec::Error::TypeMismatch {
                 name: "enum",

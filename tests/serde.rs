@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use serde::{ Serialize, Deserialize };
+use cbor4ii::core::dec;
 use cbor4ii::serde::to_vec;
 
 
@@ -155,8 +156,62 @@ fn test_serde_value() {
 #[test]
 fn test_serde_cow() {
     use std::borrow::Cow;
+    use std::convert::Infallible;
+
+    struct SlowReader<'de>(&'de [u8]);
+
+    impl<'de> dec::Read<'de> for SlowReader<'de> {
+        type Error = Infallible;
+
+        #[inline]
+        fn fill<'b>(&'b mut self, _want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
+            Ok(if self.0.is_empty() {
+                dec::Reference::Long(self.0)
+            } else {
+                dec::Reference::Long(&self.0[..1])
+            })
+        }
+
+        #[inline]
+        fn advance(&mut self, n: usize) {
+            let len = core::cmp::min(self.0.len(), n);
+            self.0 = &self.0[len..];
+        }
+    }
+
+    pub fn from_slice<'a, T>(buf: &'a [u8]) -> Result<T, dec::Error<Infallible>>
+    where
+        T: serde::Deserialize<'a>,
+    {
+        let reader = SlowReader(buf);
+        let mut deserializer = cbor4ii::serde::de::Deserializer::new(reader);
+        serde::Deserialize::deserialize(&mut deserializer)
+    }
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    #[serde(untagged)]
+    enum CowStr<'a> {
+        #[serde(borrow)]
+        Borrowed(&'a str),
+        Owned(String)
+    }
+
+    impl CowStr<'_> {
+        fn as_ref(&self) -> &str {
+            match self {
+                CowStr::Borrowed(v) => v,
+                CowStr::Owned(v) => v.as_str()
+            }
+        }
+    }
 
     assert_test!(Cow::Borrowed("123"));
+    assert_test!(CowStr::Borrowed("321"));
+
+    let input = "1234567";
+    let buf = to_vec(Vec::new(), &input).unwrap();
+    let value: CowStr = from_slice(&buf).unwrap();
+    assert_eq!(input, value.as_ref(), "{:?}", buf);
 }
 
 #[test]

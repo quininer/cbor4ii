@@ -340,13 +340,22 @@ fn decode_bytes<'a, R: Read<'a>>(name: &'static str, major_limit: u8, byte: u8, 
 #[inline]
 #[cfg(feature = "use_alloc")]
 fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, follow: bool, reader: &mut R, buf: &mut Vec<u8>)
-    -> Result<(), Error<R::Error>>
+    -> Result<Option<&'a [u8]>, Error<R::Error>>
 {
     const CAP_LIMIT: usize = 16 * 1024;
 
     if follow && byte == marker::BREAK {
-        Ok(())
+        Ok(None)
     } else if let Some(mut len) = decode_len(major, byte, reader)? {
+        if !follow {
+            if let Reference::Long(buf) = reader.fill(len)? {
+                if buf.len() >= len {
+                    reader.advance(len);
+                    return Ok(Some(&buf[..len]));
+                }
+            }
+        }
+
         if len <= CAP_LIMIT {
             buf.reserve(len); // TODO try_reserve ?
         }
@@ -365,7 +374,7 @@ fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, follow: bool, reader: &mut R
             len -= readlen;
         }
 
-        Ok(())
+        Ok(None)
     } else {
         let byte = pull_one(reader)?;
         decode_buf(major, byte, true, reader, buf)
@@ -385,10 +394,28 @@ impl<'a> Decode<'a> for types::Bytes<Vec<u8>> {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         let mut buf = Vec::new();
-        decode_buf(major::BYTES, byte, false, reader, &mut buf)?;
+        if let Some(longbuf) = decode_buf(major::BYTES, byte, false, reader, &mut buf)? {
+            buf.extend_from_slice(longbuf);
+        }
         Ok(types::Bytes(buf))
     }
 }
+
+#[cfg(feature = "use_alloc")]
+impl<'a> Decode<'a> for types::Bytes<alloc::borrow::Cow<'a, [u8]>> {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        use alloc::borrow::Cow;
+
+        let mut buf = Vec::new();
+        Ok(types::Bytes(if let Some(longbuf) = decode_buf(major::BYTES, byte, false, reader, &mut buf)? {
+            Cow::Borrowed(longbuf)
+        } else {
+            Cow::Owned(buf)
+        }))
+    }
+}
+
 
 impl<'a> Decode<'a> for &'a str {
     #[inline]
@@ -403,10 +430,30 @@ impl<'a> Decode<'a> for String {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         let mut buf = Vec::new();
-        decode_buf(major::STRING, byte, false, reader, &mut buf)?;
+        if let Some(longbuf) = decode_buf(major::STRING, byte, false, reader, &mut buf)? {
+            buf.extend_from_slice(longbuf);
+        }
         let buf = String::from_utf8(buf)
             .map_err(|err| Error::InvalidUtf8(err.utf8_error()))?;
         Ok(buf)
+    }
+}
+
+
+#[cfg(feature = "use_alloc")]
+impl<'a> Decode<'a> for alloc::borrow::Cow<'a, str> {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        use alloc::borrow::Cow;
+
+        let mut buf = Vec::new();
+        Ok(if let Some(longbuf) = decode_buf(major::STRING, byte, false, reader, &mut buf)? {
+            Cow::Borrowed(core::str::from_utf8(longbuf).map_err(Error::InvalidUtf8)?)
+        } else {
+            let buf = String::from_utf8(buf)
+                .map_err(|err| Error::InvalidUtf8(err.utf8_error()))?;
+            Cow::Owned(buf)
+        })
     }
 }
 
@@ -423,10 +470,29 @@ impl<'a> Decode<'a> for types::BadStr<Vec<u8>> {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         let mut buf = Vec::new();
-        decode_buf(major::STRING, byte, false, reader, &mut buf)?;
+        if let Some(longbuf) = decode_buf(major::STRING, byte, false, reader, &mut buf)? {
+            buf.extend_from_slice(longbuf);
+        }
         Ok(types::BadStr(buf))
     }
 }
+
+#[cfg(feature = "use_alloc")]
+impl<'a> Decode<'a> for types::BadStr<alloc::borrow::Cow<'a, [u8]>> {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        use alloc::borrow::Cow;
+
+        let mut buf = Vec::new();
+        Ok(types::BadStr(if let Some(longbuf) = decode_buf(major::STRING, byte, false, reader, &mut buf)? {
+            Cow::Borrowed(longbuf)
+        } else {
+            Cow::Owned(buf)
+        }))
+
+    }
+}
+
 
 #[inline]
 pub(crate) fn decode_len<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R)
