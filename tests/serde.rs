@@ -210,7 +210,13 @@ fn test_serde_cow() {
 
     let input = "1234567";
     let buf = to_vec(Vec::new(), &input).unwrap();
+
+    // real cow str
     let value: CowStr = from_slice(&buf).unwrap();
+    assert_eq!(input, value.as_ref(), "{:?}", buf);
+
+    // owned str
+    let value: Cow<str> = from_slice(&buf).unwrap();
     assert_eq!(input, value.as_ref(), "{:?}", buf);
 }
 

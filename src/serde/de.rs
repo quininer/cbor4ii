@@ -61,8 +61,8 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         match byte >> 5 {
             major::UNSIGNED => de.deserialize_u64(visitor),
             major::NEGATIVE => de.deserialize_i64(visitor),
-            major::BYTES => de.deserialize_byte_buf(visitor),
-            major::STRING => de.deserialize_string(visitor),
+            major::BYTES => de.deserialize_bytes(visitor),
+            major::STRING => de.deserialize_str(visitor),
             major::ARRAY => de.deserialize_seq(visitor),
             major::MAP => de.deserialize_map(visitor),
             _ => match byte {
