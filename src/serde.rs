@@ -1,7 +1,7 @@
-pub mod ser;
+//! serde support
 
-#[cfg(feature = "use_alloc")]
-pub mod de;
+mod ser;
+#[cfg(feature = "use_alloc")] mod de;
 
 #[cfg(feature = "use_std")]
 mod io_writer {
@@ -21,6 +21,7 @@ mod io_writer {
         }
     }
 
+    /// Serializes a value to a writer.
     pub fn to_writer<W, T>(writer: &mut W, value: &T)
         -> Result<(), enc::Error<io::Error>>
     where
@@ -54,6 +55,7 @@ mod buf_writer {
         }
     }
 
+    /// Serializes a value to a writer.
     pub fn to_vec<T>(buf: Vec<u8>, value: &T)
         -> Result<Vec<u8>, enc::Error<TryReserveError>>
     where T: Serialize
@@ -106,6 +108,7 @@ mod slice_reader {
         }
     }
 
+    /// Decodes a value from a bytes.
     pub fn from_slice<'a, T>(buf: &'a [u8]) -> Result<T, dec::Error<Infallible>>
     where
         T: serde::Deserialize<'a>,
@@ -157,6 +160,7 @@ mod io_buf_reader {
         }
     }
 
+    /// Decodes a value from a reader.
     pub fn from_reader<T, R>(reader: R) -> Result<T, dec::Error<io::Error>>
     where
         T: serde::de::DeserializeOwned,
@@ -172,3 +176,8 @@ mod io_buf_reader {
 #[cfg(feature = "use_alloc")] pub use buf_writer::to_vec;
 #[cfg(feature = "use_std")] pub use io_buf_reader::from_reader;
 pub use slice_reader::from_slice;
+
+pub use ser::Serializer;
+
+#[cfg(feature = "use_alloc")]
+pub use de::Deserializer;

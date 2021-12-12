@@ -1,3 +1,5 @@
+//! built-in type
+
 pub struct Negative<T>(pub T);
 
 pub struct Bytes<T>(pub T);

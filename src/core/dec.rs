@@ -1,3 +1,5 @@
+//! decode module
+
 use core::convert::TryFrom;
 use crate::core::{ major, marker, types };
 pub use crate::error::DecodeError as Error;
@@ -6,33 +8,66 @@ pub use crate::error::DecodeError as Error;
 use alloc::{ vec::Vec, string::String };
 
 
-pub trait Read<'a> {
+/// Read trait
+///
+/// This is similar to `BufRead` of standard library,
+/// but can define its own error types, and can get a
+/// reference with a long enough lifetime to implement zero-copy decode.
+pub trait Read<'de> {
     #[cfg(feature = "use_std")]
     type Error: std::error::Error + 'static;
 
     #[cfg(not(feature = "use_std"))]
     type Error: core::fmt::Display + core::fmt::Debug;
 
-    fn fill<'b>(&'b mut self, want: usize) -> Result<Reference<'a, 'b>, Self::Error>;
+    /// Returns the available bytes.
+    ///
+    /// The want value is the expected value.
+    /// If the length of bytes returned is less than this value,
+    /// zero-copy decoding will not be possible.
+    ///
+    /// Returning empty bytes means EOF.
+    fn fill<'short>(&'short mut self, want: usize) -> Result<Reference<'de, 'short>, Self::Error>;
+
+    /// Advance reader
     fn advance(&mut self, n: usize);
 
+    /// Step count
+    ///
+    /// This method maybe called when the decode is started
+    /// to calculate the decode depth.
+    /// If it returns false, the decode will return a depth limit error.
     #[inline]
     fn step_in(&mut self) -> bool {
         true
     }
 
+    /// Step count
+    ///
+    /// This method maybe called when the decode is completed
+    /// to calculate the decode depth.
     #[inline]
     fn step_out(&mut self) {}
 }
 
-pub enum Reference<'a, 'b> {
-    Long(&'a [u8]),
-    Short(&'b [u8])
+/// Bytes reference
+pub enum Reference<'de, 'short> {
+    /// If the reader can return bytes as long as its lifetime,
+    /// then zero-copy decoding will be allowed.
+    Long(&'de [u8]),
+
+    /// Bytes returned normally
+    Short(&'short [u8])
 }
 
+/// Decode trait
 pub trait Decode<'a>: Sized {
+    /// Decode with first byte
+    ///
+    /// The first byte can be read in advance to determine the decode type.
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>>;
 
+    /// Decode to type
     #[inline]
     fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let byte = pull_one(reader)?;

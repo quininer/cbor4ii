@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "use_std"), no_std)]
 
 #[cfg(feature = "use_alloc")]

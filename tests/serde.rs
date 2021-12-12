@@ -186,7 +186,7 @@ fn test_serde_cow() {
         T: serde::Deserialize<'a>,
     {
         let reader = SlowReader(buf);
-        let mut deserializer = cbor4ii::serde::de::Deserializer::new(reader);
+        let mut deserializer = cbor4ii::serde::Deserializer::new(reader);
         serde::Deserialize::deserialize(&mut deserializer)
     }
 

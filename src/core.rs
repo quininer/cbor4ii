@@ -1,3 +1,5 @@
+//! core module
+
 pub mod types;
 pub mod enc;
 pub mod dec;
