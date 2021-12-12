@@ -495,14 +495,14 @@ impl<'de, 'a, R: dec::Read<'de>> EnumAccessor<'a, R> {
                 if len == Some(1) {
                     Ok(EnumAccessor { de })
                 } else {
-                    return Err(dec::Error::RequireLength {
+                    Err(dec::Error::RequireLength {
                         name: "enum::map",
                         expect: 1,
                         value: len.unwrap_or(0)
-                    });
+                    })
                 }
             },
-            _ => return Err(dec::Error::TypeMismatch {
+            _ => Err(dec::Error::TypeMismatch {
                 name: "enum",
                 byte
             })

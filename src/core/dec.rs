@@ -86,6 +86,7 @@ impl Reference<'_, '_> {
 }
 
 #[inline]
+#[cfg_attr(not(feature = "serde1"), allow(dead_code))]
 pub(crate) fn peek_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
     let b = reader.fill(1)?
         .as_ref()
@@ -527,7 +528,6 @@ impl<'a> Decode<'a> for types::BadStr<alloc::borrow::Cow<'a, [u8]>> {
 
     }
 }
-
 
 #[inline]
 pub(crate) fn decode_len<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R)
