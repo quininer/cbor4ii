@@ -20,6 +20,7 @@ impl<R> Deserializer<R> {
 }
 
 impl<'de, R: dec::Read<'de>> Deserializer<R> {
+    #[inline]
     fn try_step(&mut self) -> Result<ScopeGuard<'_, Self>, dec::Error<R::Error>> {
         if self.reader.step_in() {
             Ok(ScopeGuard(self, |de| de.reader.step_out()))
@@ -65,7 +66,13 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
             major::STRING => de.deserialize_str(visitor),
             major::ARRAY => de.deserialize_seq(visitor),
             major::MAP => de.deserialize_map(visitor),
-            _ => match byte {
+            // TODO serde support https://github.com/serde-rs/serde/issues/1682
+            // major::TAG => match byte {
+            //     marker::BIGNUM => de.deserialize_u128(visitor),
+            //     marker::NEG_BIGNUM => de.deserialize_i128(visitor),
+            //     _ => Err(dec::Error::Unsupported { byte })
+            // },
+            major::SIMPLE => match byte {
                 marker::FALSE => {
                     de.reader.advance(1);
                     visitor.visit_bool(false)
@@ -87,7 +94,8 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
                 marker::F32 => de.deserialize_f32(visitor),
                 marker::F64 => de.deserialize_f32(visitor),
                 _ => Err(dec::Error::Unsupported { byte })
-            }
+            },
+            _ => Err(dec::Error::Unsupported { byte })
         }
     }
 

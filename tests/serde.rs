@@ -151,6 +151,8 @@ fn test_serde_value() {
         Value::Text("a".into()),
         Value::Bool(false)
     )]));
+
+    assert_test!(Value::Integer(u64::MAX as i128 + 99));
 }
 
 #[test]
@@ -248,4 +250,73 @@ fn test_serde_skip() {
     assert_eq!(value.a, skipit.a);
     assert_eq!(value.b, None);
     assert_eq!(value.c, skipit.c);
+
+
+    #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+    struct Full {
+        a: u32,
+        b: String,
+        c: Vec<u64>,
+        d: Option<Box<Full>>,
+    }
+
+    #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+    struct Missing1 {
+        a: u32,
+        b: String,
+        c: Vec<u64>,
+    }
+
+    #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+    struct Missing2 {
+        a: u32,
+        b: String,
+        d: Option<Box<Full>>
+    }
+
+    let input = Full {
+        a: u32::MAX,
+        b: String::from("short"),
+        c: vec![0x1, 0x2, 0x3, u64::MAX],
+        d: Some(Box::new(Full {
+            a: 0x42,
+            b: String::new(),
+            c: vec![u32::MAX.into()],
+            d: None
+        }))
+    };
+    let buf = to_vec(Vec::new(), &input).unwrap();
+
+    let value: Missing1 = cbor4ii::serde::from_slice(&buf).unwrap();
+    assert_eq!(value.a, input.a);
+    assert_eq!(value.b, input.b);
+    assert_eq!(value.c, input.c);
+
+    let value: Missing2 = cbor4ii::serde::from_slice(&buf).unwrap();
+    assert_eq!(value.a, input.a);
+    assert_eq!(value.b, input.b);
+    assert_eq!(value.d, input.d);
+}
+
+#[test]
+fn test_serde_any_u128() {
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    #[serde(untagged)]
+    enum AnyU128 {
+        U128(u128),
+        Str(String)
+    }
+
+    let input = AnyU128::U128(u64::MAX as u128 + 99);
+    let buf = to_vec(Vec::new(), &input).unwrap();
+
+    // serde_cbor bug
+    {
+        let value: AnyU128 = serde_cbor::from_slice(&buf).unwrap();
+        assert_ne!(input, value);
+        assert_eq!(value, AnyU128::Str("\u{1}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}b".into()))
+    }
+
+    // serde no support https://github.com/serde-rs/serde/issues/1682
+    assert!(cbor4ii::serde::from_slice::<AnyU128>(&buf).is_err())
 }
