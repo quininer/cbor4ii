@@ -491,14 +491,14 @@ impl<'de, 'a, R: dec::Read<'de>> EnumAccessor<'a, R> {
             major::STRING => Ok(EnumAccessor { de }),
             major::MAP => {
                 de.reader.advance(1);
-                let len = dec::decode_len(major::MAP, byte, &mut de.reader)?;
-                if len == Some(1) {
+
+                // 1 length map
+                if byte == (major::MAP << 5) | 1 {
                     Ok(EnumAccessor { de })
                 } else {
-                    Err(dec::Error::RequireLength {
+                    Err(dec::Error::TypeMismatch {
                         name: "enum::map",
-                        expect: 1,
-                        value: len.unwrap_or(0)
+                        byte
                     })
                 }
             },
