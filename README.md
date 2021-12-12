@@ -1,4 +1,8 @@
 # CBOR 0x(4+4)9 0x49
+[![github actions](https://github.com/quininer/cbor4ii/workflows/CI/badge.svg)](https://github.com/quininer/cbor4ii/actions)
+[![crates](https://img.shields.io/crates/v/cbor4ii.svg)](https://crates.io/crates/cbor4ii)
+[![license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/quininer/cbor4ii/blob/master/LICENSE)
+[![docs.rs](https://docs.rs/cbor4ii/badge.svg)](https://docs.rs/cbor4ii/)
 
 “The Concise Binary Object Representation (CBOR)
 is a data format whose design goals include the possibility of extremely small code size,
