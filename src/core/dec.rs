@@ -650,7 +650,6 @@ impl<'a, T: Decode<'a>> Decode<'a> for Option<T> {
     }
 }
 
-#[cfg(feature = "half-f16")]
 impl<'a> Decode<'a> for types::F16 {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
