@@ -7,6 +7,8 @@ pub use crate::error::DecodeError as Error;
 #[cfg(feature = "use_alloc")]
 use alloc::{ vec::Vec, string::String };
 
+#[cfg(feature = "use_alloc")]
+use crate::util::ScopeGuard;
 
 /// Read trait
 ///
@@ -418,6 +420,12 @@ fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R, buf: &mut Ve
                 break
             }
 
+            if !reader.step_in() {
+                return Err(Error::DepthLimit);
+            }
+            let mut reader = ScopeGuard(reader, |reader| reader.step_out());
+            let reader = &mut *reader;
+
             if let Some(longbuf) = decode_buf(major, byte, reader, buf)? {
                 buf.extend_from_slice(longbuf);
             }
@@ -558,6 +566,12 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         let mut arr = Vec::new();
 
+        if !reader.step_in() {
+            return Err(Error::DepthLimit);
+        }
+        let mut reader = ScopeGuard(reader, |reader| reader.step_out());
+        let reader = &mut *reader;
+
         if let Some(len) = decode_len(major::ARRAY, byte, reader)? {
             if len <= 256 {
                 arr.reserve(len); // TODO try_reserve ?
@@ -589,6 +603,12 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         let mut map = Vec::new();
+
+        if !reader.step_in() {
+            return Err(Error::DepthLimit);
+        }
+        let mut reader = ScopeGuard(reader, |reader| reader.step_out());
+        let reader = &mut *reader;
 
         if let Some(len) = decode_len(major::MAP, byte, reader)? {
             if len <= 256 {
