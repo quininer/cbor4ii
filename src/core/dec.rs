@@ -396,13 +396,14 @@ fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R, buf: &mut Ve
         while len != 0 {
             let readbuf = reader.fill(len)?;
             let readbuf = readbuf.as_ref();
-            let readlen = readbuf.len();
 
-            if readlen == 0 {
+            if readbuf.is_empty() {
                 return Err(Error::Eof);
             }
 
-            buf.extend_from_slice(readbuf);
+            let readlen = core::cmp::min(readbuf.len(), len);
+
+            buf.extend_from_slice(&readbuf[..readlen]);
             reader.advance(readlen);
             len -= readlen;
         }

@@ -1,8 +1,9 @@
 #![cfg(feature = "use_alloc")]
 
+use std::collections::TryReserveError;
 use std::convert::Infallible;
 use cbor4ii::core::Value;
-use cbor4ii::core::enc;
+use cbor4ii::core::enc::{ self, Encode };
 use cbor4ii::core::dec::{ self, Decode };
 
 
@@ -71,24 +72,22 @@ fn test_decode_value() {
     }
 }
 
+
+struct BufWriter(Vec<u8>);
+
+impl enc::Write for BufWriter {
+    type Error = TryReserveError;
+
+    #[inline]
+    fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
+        self.0.try_reserve(input.len())?;
+        self.0.extend_from_slice(input);
+        Ok(())
+    }
+}
+
 #[test]
 fn test_decode_buf_segment() -> anyhow::Result<()> {
-    use std::collections::TryReserveError;
-    use cbor4ii::core::enc::Encode;
-
-    struct BufWriter(Vec<u8>);
-
-    impl enc::Write for BufWriter {
-        type Error = TryReserveError;
-
-        #[inline]
-        fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
-            self.0.try_reserve(input.len())?;
-            self.0.extend_from_slice(input);
-            Ok(())
-        }
-    }
-
     let mut writer = BufWriter(Vec::new());
     enc::StrStart.encode(&mut writer)?;
     "test".encode(&mut writer)?;
@@ -97,10 +96,38 @@ fn test_decode_buf_segment() -> anyhow::Result<()> {
     enc::End.encode(&mut writer)?;
 
     let mut reader = SliceReader::new(&writer.0);
-
     let output = String::decode(&mut reader)?;
-
     assert_eq!("testtest2test3", output);
+
+    Ok(())
+}
+
+#[test]
+fn test_decode_bad_reader_buf() -> anyhow::Result<()> {
+    let mut writer = BufWriter(Vec::new());
+    "test".encode(&mut writer)?;
+
+    struct LongReader<'a>(&'a [u8]);
+
+    impl<'de> dec::Read<'de> for LongReader<'de> {
+        type Error = Infallible;
+
+        #[inline]
+        fn fill<'b>(&'b mut self, _want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
+            Ok(dec::Reference::Short(&self.0))
+        }
+
+        #[inline]
+        fn advance(&mut self, n: usize) {
+            let len = core::cmp::min(self.0.len(), n);
+            self.0 = &self.0[len..];
+        }
+    }
+
+    writer.0.resize(1024, 0);
+    let mut reader = LongReader(&writer.0);
+    let output = String::decode(&mut reader)?;
+    assert_eq!("test", output);
 
     Ok(())
 }
