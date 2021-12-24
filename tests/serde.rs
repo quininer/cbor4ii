@@ -228,6 +228,11 @@ fn test_serde_cow() {
     // owned str
     let value: Cow<str> = short_from_slice(&buf).unwrap();
     assert_eq!(input, value.as_ref(), "{:?}", buf);
+
+    // The current behavior, maybe serde will optimize it in future.
+    // see https://github.com/serde-rs/serde/blob/ce0844b9ecc32377b5e4545d759d385a8c46bc6a/serde/src/de/impls.rs#L1721
+    //
+    // assert!(matches!(value, Cow::Owned(_)));
 }
 
 #[test]
