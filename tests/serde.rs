@@ -320,3 +320,21 @@ fn test_serde_any_u128() {
     // serde no support https://github.com/serde-rs/serde/issues/1682
     assert!(cbor4ii::serde::from_slice::<AnyU128>(&buf).is_err())
 }
+
+#[test]
+fn test_serde_regression_issue4() {
+    #[derive(Deserialize, Serialize, Debug, PartialEq)]
+    enum Foo {
+        A(String),
+    }
+
+    let foo = Foo::A(String::new());
+
+    let mut data = Vec::new();
+    cbor4ii::serde::to_writer(&mut data, &foo).unwrap();
+
+    let reader = std::io::BufReader::new(data.as_slice());
+    let foo2: Foo = cbor4ii::serde::from_reader(reader).unwrap();
+
+    assert_eq!(foo, foo2);
+}

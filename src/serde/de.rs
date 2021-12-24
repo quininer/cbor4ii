@@ -146,14 +146,6 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let v = <types::Bytes<&[u8]>>::decode(&mut self.reader)?;
-        visitor.visit_borrowed_bytes(v.0)
-    }
-
-    #[inline]
-    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
         match <types::Bytes<Cow<[u8]>>>::decode(&mut self.reader)?.0 {
             Cow::Borrowed(buf) => visitor.visit_borrowed_bytes(buf),
             Cow::Owned(buf) => visitor.visit_byte_buf(buf)
@@ -161,21 +153,27 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     }
 
     #[inline]
-    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let v = <&str>::decode(&mut self.reader)?;
-        visitor.visit_borrowed_str(v)
+        self.deserialize_bytes(visitor)
     }
 
     #[inline]
-    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
         match <Cow<str>>::decode(&mut self.reader)? {
             Cow::Borrowed(buf) => visitor.visit_borrowed_str(buf),
             Cow::Owned(buf) => visitor.visit_string(buf)
         }
+    }
+
+    #[inline]
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where V: Visitor<'de>
+    {
+        self.deserialize_str(visitor)
     }
 
     #[inline]
