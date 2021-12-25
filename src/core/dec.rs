@@ -543,7 +543,6 @@ impl<'a> Decode<'a> for types::BadStr<alloc::borrow::Cow<'a, [u8]>> {
         } else {
             Cow::Owned(buf)
         }))
-
     }
 }
 
@@ -557,6 +556,15 @@ pub(crate) fn decode_len<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R)
         Ok(Some(len))
     } else {
         Ok(None)
+    }
+}
+
+pub struct ArrayStart(pub Option<usize>);
+
+impl<'a> Decode<'a> for ArrayStart {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        decode_len(major::ARRAY, byte, reader).map(ArrayStart)
     }
 }
 
@@ -595,6 +603,15 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
         }
 
         Ok(arr)
+    }
+}
+
+pub struct MapStart(pub Option<usize>);
+
+impl<'a> Decode<'a> for MapStart {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        decode_len(major::MAP, byte, reader).map(MapStart)
     }
 }
 
@@ -734,5 +751,15 @@ impl<'a> Decode<'a> for f64 {
                 byte
             })
         }
+    }
+}
+
+#[inline]
+pub fn is_break<'a, R: Read<'a>>(reader: &mut R) -> Result<bool, Error<R::Error>> {
+    if peek_one(reader)? == marker::BREAK {
+        reader.advance(1);
+        Ok(true)
+    } else {
+        Ok(false)
     }
 }

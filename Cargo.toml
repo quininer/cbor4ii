@@ -1,6 +1,6 @@
 [package]
 name = "cbor4ii"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["quininer <quininer@live.com>"]
 description = "CBOR: Concise Binary Object Representation"
 repository = "https://github.com/quininer/cbor4ii"

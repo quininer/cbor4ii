@@ -2,6 +2,7 @@
 
 use std::collections::TryReserveError;
 use std::convert::Infallible;
+use anyhow::Context;
 use cbor4ii::core::Value;
 use cbor4ii::core::enc::{ self, Encode };
 use cbor4ii::core::dec::{ self, Decode };
@@ -128,6 +129,41 @@ fn test_decode_bad_reader_buf() -> anyhow::Result<()> {
     let mut reader = LongReader(&writer.0);
     let output = String::decode(&mut reader)?;
     assert_eq!("test", output);
+
+    Ok(())
+}
+
+#[test]
+fn test_decode_array_map() -> anyhow::Result<()> {
+    // array bounded
+    let mut writer = BufWriter(Vec::new());
+    (&[0u32, 1, 2, 3, 4, 5][..]).encode(&mut writer)?;
+
+    let mut reader = SliceReader::new(&writer.0);
+    let dec::ArrayStart(len) = dec::ArrayStart::decode(&mut reader)?;
+    let len = len.context("expect len")?;
+    for i in 0..len {
+        let n = u64::decode(&mut reader)?;
+        assert_eq!(n, i as u64);
+    }
+
+    // map unbounded
+    let mut writer = BufWriter(Vec::new());
+    enc::MapStartUnbounded.encode(&mut writer)?;
+    for i in 0u64..6 {
+        i.encode(&mut writer)?;
+    }
+    enc::End.encode(&mut writer)?;
+
+    let mut reader = SliceReader::new(&writer.0);
+    let dec::MapStart(len) = dec::MapStart::decode(&mut reader)?;
+    assert_eq!(len, None);
+    let mut count = 0u64;
+    while !dec::is_break(&mut reader)? {
+        let n = u64::decode(&mut reader)?;
+        assert_eq!(n, count);
+        count += 1;
+    }
 
     Ok(())
 }

@@ -181,6 +181,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where V: Visitor<'de>
     {
         let byte = dec::pull_one(&mut self.reader)?;
+        // 0 length array
         if byte == (major::ARRAY << 5) {
             visitor.visit_unit()
         } else {
@@ -474,19 +475,12 @@ impl<'de, 'a, R: dec::Read<'de>> EnumAccessor<'a, R> {
     {
         let byte = dec::peek_one(&mut de.reader)?;
         match byte >> 5 {
+            // string
             major::STRING => Ok(EnumAccessor { de }),
-            major::MAP => {
+            // 1 length map
+            major::MAP if byte == (major::MAP << 5) | 1 => {
                 de.reader.advance(1);
-
-                // 1 length map
-                if byte == (major::MAP << 5) | 1 {
-                    Ok(EnumAccessor { de })
-                } else {
-                    Err(dec::Error::TypeMismatch {
-                        name: "enum::map",
-                        byte
-                    })
-                }
+                Ok(EnumAccessor { de })
             },
             _ => Err(dec::Error::TypeMismatch {
                 name: "enum",
