@@ -122,24 +122,10 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let sbuf = <&str>::decode(&mut self.reader)?;
-        let count = sbuf.chars().count();
-        if count == 1 {
-            let c = sbuf.chars()
-                .next()
-                .ok_or(dec::Error::RequireLength {
-                    name: "char",
-                    expect: 1,
-                    value: count
-                })?;
-            visitor.visit_char(c)
-        } else {
-            Err(dec::Error::RequireLength {
-                name: "char",
-                expect: 1,
-                value: count
-            })
-        }
+        // Treat it as a String.
+        // This is a bit wasteful when encountering strings of more than one character,
+        // but we are optimistic this is a cold path.
+        self.deserialize_str(visitor)
     }
 
     #[inline]
