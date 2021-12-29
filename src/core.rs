@@ -263,7 +263,7 @@ impl<'de> serde::Deserialize<'de> for Value {
             where A: SeqAccess<'de>,
             {
                 let mut list = seq.size_hint()
-                    .map(|n| Vec::with_capacity(core::cmp::min(n, 1024)))
+                    .map(|n| Vec::with_capacity(core::cmp::min(n, 256)))
                     .unwrap_or_else(Vec::new);
 
                 while let Some(v) = seq.next_element()? {
@@ -278,7 +278,7 @@ impl<'de> serde::Deserialize<'de> for Value {
             where A: MapAccess<'de>,
             {
                 let mut list = map.size_hint()
-                    .map(|n| Vec::with_capacity(core::cmp::min(n, 1024)))
+                    .map(|n| Vec::with_capacity(core::cmp::min(n, 256)))
                     .unwrap_or_else(Vec::new);
 
                 while let Some((k, v)) = map.next_entry()? {

@@ -391,9 +391,7 @@ fn decode_buf<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R, buf: &mut Ve
             }
         }
 
-        if len <= CAP_LIMIT {
-            buf.reserve(len); // TODO try_reserve ?
-        }
+        buf.reserve(core::cmp::min(len, CAP_LIMIT)); // TODO try_reserve ?
 
         while len != 0 {
             let readbuf = reader.fill(len)?;
@@ -581,9 +579,7 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
         let reader = &mut *reader;
 
         if let Some(len) = decode_len(major::ARRAY, byte, reader)? {
-            if len <= 256 {
-                arr.reserve(len); // TODO try_reserve ?
-            }
+            arr.reserve(core::cmp::min(len, 256)); // TODO try_reserve ?
 
             for _ in 0..len {
                 let value = T::decode(reader)?;
@@ -628,9 +624,7 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
         let reader = &mut *reader;
 
         if let Some(len) = decode_len(major::MAP, byte, reader)? {
-            if len <= 256 {
-                map.reserve(len); // TODO try_reserve ?
-            }
+            map.reserve(core::cmp::min(len, 256)); // TODO try_reserve ?
 
             for _ in 0..len {
                 let k = K::decode(reader)?;
