@@ -167,3 +167,28 @@ fn test_decode_array_map() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_value_i128() -> anyhow::Result<()> {
+    #[inline]
+    fn strip_zero(input: &[u8]) -> &[u8] {
+        let pos = input.iter()
+            .position(|&n| n != 0x0)
+            .unwrap_or(input.len());
+        &input[pos..]
+    }
+
+    let n = u64::MAX as i128 + 99;
+
+    let mut writer = BufWriter(Vec::new());
+    Value::Integer(n).encode(&mut writer)?;
+
+    let mut reader = SliceReader::new(&writer.0);
+    let value = Value::decode(&mut reader)?;
+
+    let int_bytes = n.to_be_bytes();
+    let int_bytes = strip_zero(&int_bytes);
+    assert_eq!(value, Value::Tag(2, Box::new(Value::Bytes(int_bytes.into()))));
+
+    Ok(())
+}

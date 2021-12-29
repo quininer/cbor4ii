@@ -93,7 +93,11 @@ impl<'de> dec::Decode<'de> for Value {
                 .map(Value::Array),
             major::MAP => <types::Map<Vec<(Value, Value)>>>::decode_with(byte, reader)
                 .map(|map| Value::Map(map.0)),
-            _ => match byte {
+            major::TAG => {
+                let tag = <types::Tag<Value>>::decode_with(byte, reader)?;
+                Ok(Value::Tag(tag.0, Box::new(tag.1)))
+            },
+            major::SIMPLE => match byte {
                 marker::FALSE => Ok(Value::Bool(false)),
                 marker::TRUE => Ok(Value::Bool(true)),
                 marker::NULL | marker::UNDEFINED => Ok(Value::Null),
@@ -107,7 +111,8 @@ impl<'de> dec::Decode<'de> for Value {
                 marker::F64 => f64::decode_with(byte, reader)
                     .map(Value::Float),
                 _ => Err(dec::Error::Unsupported { byte })
-            }
+            },
+            _ => Err(dec::Error::Unsupported { byte })
         }
     }
 }
