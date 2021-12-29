@@ -31,7 +31,6 @@ pub(crate) mod marker {
     pub const BREAK: u8   = 0xff;
 }
 
-#[cfg_attr(feature = "serde1-value", derive(serde::Serialize, serde::Deserialize))]
 #[cfg(feature = "use_alloc")]
 #[derive(Debug, PartialEq)]
 #[non_exhaustive]
@@ -110,5 +109,186 @@ impl<'de> dec::Decode<'de> for Value {
                 _ => Err(dec::Error::Unsupported { byte })
             }
         }
+    }
+}
+
+#[cfg(feature = "serde1-value")]
+impl serde::Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer
+    {
+        use serde::ser::{ Error, SerializeMap, SerializeSeq };
+
+        match self {
+            Value::Null => serializer.serialize_none(),
+            Value::Bool(v) => serializer.serialize_bool(*v),
+            Value::Integer(v) => serializer.serialize_i128(*v),
+            Value::Float(v) => serializer.serialize_f64(*v),
+            Value::Bytes(v) => serializer.serialize_bytes(v),
+            Value::Text(v) => serializer.serialize_str(v),
+            Value::Array(v) => {
+                let mut seq = serializer.serialize_seq(Some(v.len()))?;
+                for value in v.iter() {
+                    seq.serialize_element(value)?;
+                }
+                seq.end()
+            },
+            Value::Map(v) => {
+                let mut map = serializer.serialize_map(Some(v.len()))?;
+                for (k, v) in v.iter() {
+                    map.serialize_entry(k, v)?;
+                }
+                map.end()
+            },
+            Value::Tag(..) =>
+                Err(S::Error::custom("serialization Tag via serde is not supported"))
+        }
+    }
+}
+
+#[cfg(feature = "serde1-value")]
+impl<'de> serde::Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>
+    {
+        use serde::de::{ Error, Visitor, SeqAccess, MapAccess };
+
+        struct ValueVisitor;
+
+        impl<'de> Visitor<'de> for ValueVisitor {
+            type Value = Value;
+
+            fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                formatter.write_str("invalid input or unsupported type")
+            }
+
+            #[inline]
+            fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+            where E: Error
+            {
+                Ok(Value::Bool(v))
+            }
+
+            #[inline]
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where E: Error
+            {
+                Ok(Value::Integer(v.into()))
+            }
+
+            #[inline]
+            fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
+            where E: Error
+            {
+                Ok(Value::Integer(v))
+            }
+
+            #[inline]
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                Ok(Value::Integer(v.into()))
+            }
+
+            #[inline]
+            fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                use core::convert::TryFrom;
+
+                let v = i128::try_from(v).map_err(E::custom)?;
+                Ok(Value::Integer(v))
+            }
+
+            #[inline]
+            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                Ok(Value::Float(v))
+            }
+
+            #[inline]
+            fn visit_char<E>(self, v: char) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                Ok(Value::Text(v.into()))
+            }
+
+            #[inline]
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                Ok(Value::Text(v.into()))
+            }
+
+            #[inline]
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                Ok(Value::Text(v))
+            }
+
+            #[inline]
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                Ok(Value::Bytes(v.into()))
+            }
+
+            #[inline]
+            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                Ok(Value::Bytes(v))
+            }
+
+            #[inline]
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                Ok(Value::Null)
+            }
+
+            #[inline]
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where E: Error,
+            {
+                self.visit_none()
+            }
+
+            #[inline]
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where A: SeqAccess<'de>,
+            {
+                let mut list = seq.size_hint()
+                    .map(|n| Vec::with_capacity(core::cmp::min(n, 1024)))
+                    .unwrap_or_else(Vec::new);
+
+                while let Some(v) = seq.next_element()? {
+                    list.push(v);
+                }
+
+                Ok(Value::Array(list))
+            }
+
+            #[inline]
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where A: MapAccess<'de>,
+            {
+                let mut list = map.size_hint()
+                    .map(|n| Vec::with_capacity(core::cmp::min(n, 1024)))
+                    .unwrap_or_else(Vec::new);
+
+                while let Some((k, v)) = map.next_entry()? {
+                    list.push((k, v));
+                }
+
+                Ok(Value::Map(list))
+            }
+        }
+
+        deserializer.deserialize_any(ValueVisitor)
     }
 }

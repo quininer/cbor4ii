@@ -66,12 +66,13 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
             major::STRING => de.deserialize_string(visitor),
             major::ARRAY => de.deserialize_seq(visitor),
             major::MAP => de.deserialize_map(visitor),
-            // TODO serde support https://github.com/serde-rs/serde/issues/1682
-            // major::TAG => match byte {
-            //     marker::BIGNUM => de.deserialize_u128(visitor),
-            //     marker::NEG_BIGNUM => de.deserialize_i128(visitor),
-            //     _ => Err(dec::Error::Unsupported { byte })
-            // },
+            // NOTE: that this does not support untagged enum.
+            // see https://github.com/serde-rs/serde/issues/1682
+            major::TAG => match byte {
+                0xc2 => de.deserialize_u128(visitor),
+                0xc3 => de.deserialize_i128(visitor),
+                _ => Err(dec::Error::Unsupported { byte })
+            },
             major::SIMPLE => match byte {
                 marker::FALSE => {
                     de.reader.advance(1);
