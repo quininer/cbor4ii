@@ -343,3 +343,10 @@ fn test_serde_regression_issue4() {
 
     assert_eq!(foo, foo2);
 }
+
+#[test]
+fn test_serde_regression_issue6() {
+    let val = cbor4ii::core::Value::Null;
+    let ret = cbor4ii::serde::to_vec(vec![], &val).unwrap();
+    assert_eq!(ret, vec![0xf6]);
+}
