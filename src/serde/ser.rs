@@ -271,23 +271,17 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         T: fmt::Display,
     {
         use core::fmt::Write;
+        use serde::ser::Error;
 
-        let mut buf = FmtReadBuffer::default();
+        let mut writer = FmtWriter::new(&mut self.writer);
 
-        if write!(&mut buf, "{}", value).is_ok() {
-            types::BadStr(buf.read()).encode(&mut self.writer)?;
-        } else {
-            enc::StrStart.encode(&mut self.writer)?;
-            let mut writer = FmtWriter {
-                inner: &mut self.writer,
-                error: None
-            };
-            write!(&mut writer, "{}", value)
-                .map_err(|_| writer.error.unwrap())?;
-            enc::End.encode(&mut self.writer)?;
+        if let Err(err) = write!(&mut writer, "{}", value) {
+            if !writer.is_error() {
+                return Err(enc::Error::custom(err));
+            }
         }
 
-        Ok(())
+        writer.flush()
     }
 
     #[inline]
@@ -441,53 +435,79 @@ impl<W: enc::Write> serde::ser::SerializeStructVariant for BoundedCollect<'_, W>
     }
 }
 
-struct FmtReadBuffer {
-    buf: [u8; 256],
-    pos: u8,
-}
-
-impl Default for FmtReadBuffer {
-    fn default() -> FmtReadBuffer {
-        FmtReadBuffer { buf: [0; 256], pos: 0 }
-    }
-}
-
-impl FmtReadBuffer {
-    fn read(&self) -> &[u8] {
-        let pos = self.pos as usize;
-        &self.buf[..pos]
-    }
-}
-
-impl fmt::Write for FmtReadBuffer {
-    #[inline]
-    fn write_str(&mut self, input: &str) -> fmt::Result {
-        let pos = self.pos as usize;
-        if self.buf.len() - pos >= input.len() {
-            self.buf[pos..][..input.len()]
-                .copy_from_slice(input.as_bytes());
-            self.pos += input.len() as u8;
-            Ok(())
-        } else {
-            Err(fmt::Error)
-        }
-    }
-}
-
 struct FmtWriter<'a, W: enc::Write> {
     inner: &'a mut W,
-    error: Option<enc::Error<W::Error>>
+    buf: [u8; 256],
+    pos: usize,
+    state: State<enc::Error<W::Error>>,
+}
+
+enum State<E> {
+    Short,
+    Segment,
+    Error(E)
 }
 
 impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
     #[inline]
     fn write_str(&mut self, input: &str) -> fmt::Result {
-        match input.encode(self.inner) {
-            Ok(()) => Ok(()),
-            Err(err) => {
-                self.error = Some(err);
-                Err(fmt::Error)
+        macro_rules! try_ {
+            ( $e:expr ) => {
+                match $e {
+                    Ok(v) => v,
+                    Err(err) => {
+                        self.state = State::Error(err);
+                        return Err(fmt::Error);
+                    }
+                }
             }
+        }
+
+        match self.state {
+            State::Short => {
+                if self.buf.len() - self.pos >= input.len() {
+                    self.buf[self.pos..][..input.len()]
+                        .copy_from_slice(input.as_bytes());
+                    self.pos += input.len();
+                } else {
+                    self.state = State::Segment;
+                    try_!(enc::StrStart.encode(self.inner));
+                    try_!(types::BadStr(&self.buf[..self.pos]).encode(self.inner));
+                    try_!(input.encode(self.inner));
+                }
+
+                Ok(())
+            },
+            State::Segment => {
+                try_!(input.encode(self.inner));
+                Ok(())
+            },
+            State::Error(_) => Err(fmt::Error)
+        }
+    }
+}
+
+impl<W: enc::Write> FmtWriter<'_, W> {
+    fn new(inner: &mut W) -> FmtWriter<'_, W> {
+        FmtWriter {
+            inner,
+            buf: [0; 256],
+            pos: 0,
+            state: State::Short,
+        }
+    }
+
+    #[inline]
+    fn is_error(&self) -> bool {
+        matches!(self.state, State::Error(_))
+    }
+
+    #[inline]
+    fn flush(self) -> Result<(), enc::Error<W::Error>> {
+        match self.state {
+            State::Short => types::BadStr(&self.buf[..self.pos]).encode(self.inner),
+            State::Segment => enc::End.encode(self.inner),
+            State::Error(err) => Err(err)
         }
     }
 }

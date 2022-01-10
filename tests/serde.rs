@@ -1,9 +1,10 @@
 #![cfg(all(feature = "serde1", feature = "use_std"))]
 
+use std::{ io, fmt };
 use std::collections::BTreeMap;
 use serde::{ Serialize, Deserialize };
 use cbor4ii::core::dec;
-use cbor4ii::serde::to_vec;
+use cbor4ii::serde::{ to_vec, from_slice };
 
 
 #[track_caller]
@@ -11,7 +12,7 @@ fn de<'a,T>(bytes: &'a [u8], _value: &T)
     -> T
 where T: Deserialize<'a>
 {
-    match cbor4ii::serde::from_slice(bytes) {
+    match from_slice(bytes) {
         Ok(t) => t,
         Err(err) => panic!("{:?}: {:?}", err, bytes)
     }
@@ -214,7 +215,7 @@ fn test_serde_cow() {
     let buf = to_vec(Vec::new(), &input).unwrap();
 
     // real cow str ok
-    let value: CowStr = cbor4ii::serde::from_slice(&buf).unwrap();
+    let value: CowStr = from_slice(&buf).unwrap();
     if let CowStr::Borrowed(s) = value {
         assert_eq!(input, s);
     } else {
@@ -292,15 +293,94 @@ fn test_serde_skip() {
     };
     let buf = to_vec(Vec::new(), &input).unwrap();
 
-    let value: Missing1 = cbor4ii::serde::from_slice(&buf).unwrap();
+    let value: Missing1 = from_slice(&buf).unwrap();
     assert_eq!(value.a, input.a);
     assert_eq!(value.b, input.b);
     assert_eq!(value.c, input.c);
 
-    let value: Missing2 = cbor4ii::serde::from_slice(&buf).unwrap();
+    let value: Missing2 = from_slice(&buf).unwrap();
     assert_eq!(value.a, input.a);
     assert_eq!(value.b, input.b);
     assert_eq!(value.d, input.d);
+}
+
+#[test]
+fn test_serde_format_args() {
+    struct Args<T>(T);
+
+    impl<T: fmt::Debug> Serialize for Args<T> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.collect_str(&format_args!("{:?}", self.0))
+        }
+    }
+
+    // short
+    {
+        let args = Args((1u32, 2u64, "123"));
+        let buf = to_vec(Vec::new(), &args).unwrap();
+        let output: &str = from_slice(&buf).unwrap();
+
+        assert!(buf.len() <= 256);
+        assert_eq!(output, format!("{:?}", args.0))
+    }
+
+    // long
+    {
+        let args = Args(vec![
+            String::from("123"),
+            std::iter::repeat('*').take(1024).collect(),
+            std::iter::repeat('#').take(32).collect(),
+            String::new(),
+            String::from("321")
+        ]);
+
+        let buf = to_vec(Vec::new(), &args).unwrap();
+        let output: String = from_slice(&buf).unwrap();
+
+        assert!(buf.len() > 256);
+        assert_eq!(output, format!("{:?}", args.0))
+    }
+
+    // error
+    {
+        struct BadDebug;
+
+        impl fmt::Debug for BadDebug {
+            fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
+                Err(fmt::Error)
+            }
+        }
+
+        let args = Args(BadDebug);
+        assert!(to_vec(Vec::new(), &args).is_err());
+    }
+
+    // writer error
+    {
+        struct BadWriter;
+
+        impl io::Write for BadWriter {
+            fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+                Err(io::Error::new(io::ErrorKind::Other, "bad writer"))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let args = Args(1);
+        let mut writer = BadWriter;
+        let err = cbor4ii::serde::to_writer(&mut writer, &args).unwrap_err();
+        let err = match err {
+            cbor4ii::EncodeError::Write(err) => err,
+            _ => panic!()
+        };
+        assert_eq!(err.kind(), io::ErrorKind::Other);
+    }
 }
 
 #[test]
@@ -323,7 +403,7 @@ fn test_serde_any_u128() {
     }
 
     // serde no support https://github.com/serde-rs/serde/issues/1682
-    assert!(cbor4ii::serde::from_slice::<AnyU128>(&buf).is_err())
+    assert!(from_slice::<AnyU128>(&buf).is_err())
 }
 
 #[test]
