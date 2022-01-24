@@ -192,3 +192,26 @@ fn test_value_i128() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_mut_ref_write_read() -> anyhow::Result<()> {
+    fn test_write_str<W: enc::Write>(mut writer: W, input: &str) {
+        input.encode(&mut writer).unwrap()
+    }
+
+    fn test_read_str<'de, R: dec::Read<'de>>(mut reader: R) -> &'de str {
+        <&str>::decode(&mut reader).unwrap()
+    }
+
+    let input = "123";
+
+    let mut writer = BufWriter(Vec::new());
+    test_write_str(&mut writer, input);
+
+    let mut reader = SliceReader::new(&writer.0);
+    let output = test_read_str(&mut reader);
+
+    assert_eq!(input, output);
+
+    Ok(())
+}

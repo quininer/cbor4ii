@@ -33,6 +33,15 @@ impl<T: Encode> Encode for &'_ T {
     }
 }
 
+impl<'a, T: Write> Write for &'a mut T {
+    type Error = T::Error;
+
+    #[inline]
+    fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
+        (**self).push(input)
+    }
+}
+
 struct TypeNum<V> {
     type_: u8,
     value: V

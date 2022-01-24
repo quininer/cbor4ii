@@ -87,6 +87,30 @@ impl Reference<'_, '_> {
     }
 }
 
+impl<'a, 'de, T: Read<'de>> Read<'de> for &'a mut T {
+    type Error = T::Error;
+
+    #[inline]
+    fn fill<'short>(&'short mut self, want: usize) -> Result<Reference<'de, 'short>, Self::Error> {
+        (**self).fill(want)
+    }
+
+    #[inline]
+    fn advance(&mut self, n: usize) {
+        (**self).advance(n)
+    }
+
+    #[inline]
+    fn step_in(&mut self) -> bool {
+        (**self).step_in()
+    }
+
+    #[inline]
+    fn step_out(&mut self) {
+        (**self).step_out()
+    }
+}
+
 #[inline]
 #[cfg_attr(not(feature = "serde1"), allow(dead_code))]
 pub(crate) fn peek_one<'a, R: Read<'a>>(reader: &mut R) -> Result<u8, Error<R::Error>> {
