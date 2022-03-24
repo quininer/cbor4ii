@@ -40,7 +40,9 @@ jobs:
         toolchain: nightly
         override: true
     - uses: actions/checkout@master
-    - name: Test
+    - name: minimum feature
       run: cargo test --all
-    - name: Test Simd
+    - name: all feature
       run: cargo test --all --all-features
+    - name: serde + use_alloc
+      run: cargo test --all --features serde1,use_alloc

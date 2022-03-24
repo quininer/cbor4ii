@@ -5,7 +5,7 @@ use core::num::TryFromIntError;
 #[non_exhaustive]
 pub enum EncodeError<E> {
     #[cfg(feature = "serde1")]
-    Msg(alloc::string::String),
+    Msg(crate::alloc::string::String),
     Write(E)
 }
 
@@ -59,7 +59,7 @@ impl<E: fmt::Debug> fmt::Display for EncodeError<E> {
 #[non_exhaustive]
 pub enum DecodeError<E> {
     #[cfg(feature = "serde1")]
-    Msg(alloc::string::String),
+    Msg(crate::alloc::string::String),
     Read(E),
     Eof,
     Mismatch {

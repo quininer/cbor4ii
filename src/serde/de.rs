@@ -1,4 +1,4 @@
-use alloc::borrow::Cow;
+use crate::alloc::borrow::Cow;
 use serde::de::{ self, Visitor };
 use crate::core::{ major, marker, types };
 use crate::core::dec::{ self, Decode };

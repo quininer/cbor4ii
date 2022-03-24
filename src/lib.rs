@@ -1,8 +1,11 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "use_std"), no_std)]
 
-#[cfg(feature = "use_alloc")]
+#[cfg(all(not(feature = "use_std"), feature = "use_alloc"))]
 extern crate alloc;
+
+#[cfg(all(feature = "use_std", feature = "use_alloc"))]
+use std as alloc;
 
 mod error;
 pub mod core;

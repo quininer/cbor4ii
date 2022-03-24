@@ -5,7 +5,7 @@ use crate::core::{ major, marker, types };
 pub use crate::error::DecodeError as Error;
 
 #[cfg(feature = "use_alloc")]
-use alloc::{ vec::Vec, string::String };
+use crate::alloc::{ vec::Vec, string::String };
 
 #[cfg(feature = "use_alloc")]
 use crate::util::ScopeGuard;
@@ -478,10 +478,10 @@ impl<'a> Decode<'a> for types::Bytes<Vec<u8>> {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for types::Bytes<alloc::borrow::Cow<'a, [u8]>> {
+impl<'a> Decode<'a> for types::Bytes<crate::alloc::borrow::Cow<'a, [u8]>> {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
-        use alloc::borrow::Cow;
+        use crate::alloc::borrow::Cow;
 
         let mut buf = Vec::new();
         Ok(types::Bytes(if let Some(longbuf) = decode_buf(major::BYTES, byte, reader, &mut buf)? {
@@ -517,10 +517,10 @@ impl<'a> Decode<'a> for String {
 
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for alloc::borrow::Cow<'a, str> {
+impl<'a> Decode<'a> for crate::alloc::borrow::Cow<'a, str> {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
-        use alloc::borrow::Cow;
+        use crate::alloc::borrow::Cow;
 
         let mut buf = Vec::new();
         Ok(if let Some(longbuf) = decode_buf(major::STRING, byte, reader, &mut buf)? {
@@ -554,10 +554,10 @@ impl<'a> Decode<'a> for types::BadStr<Vec<u8>> {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for types::BadStr<alloc::borrow::Cow<'a, [u8]>> {
+impl<'a> Decode<'a> for types::BadStr<crate::alloc::borrow::Cow<'a, [u8]>> {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
-        use alloc::borrow::Cow;
+        use crate::alloc::borrow::Cow;
 
         let mut buf = Vec::new();
         Ok(types::BadStr(if let Some(longbuf) = decode_buf(major::STRING, byte, reader, &mut buf)? {

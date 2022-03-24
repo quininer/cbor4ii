@@ -5,7 +5,7 @@ pub mod enc;
 pub mod dec;
 
 #[cfg(feature = "use_alloc")]
-use alloc::{ vec::Vec, boxed::Box, string::String };
+use crate::alloc::{ vec::Vec, boxed::Box, string::String };
 
 
 pub(crate) mod major {

@@ -36,8 +36,8 @@ mod io_writer {
 
 #[cfg(feature = "use_alloc")]
 mod buf_writer {
-    use alloc::vec::Vec;
-    use alloc::collections::TryReserveError;
+    use crate::alloc::vec::Vec;
+    use crate::alloc::collections::TryReserveError;
     use serde::Serialize;
     use crate::core::enc;
     use crate::serde::ser;
