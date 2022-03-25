@@ -425,6 +425,7 @@ fn test_serde_regression_issue4() {
 }
 
 #[test]
+#[cfg(feature = "serde1-value")]
 fn test_serde_regression_issue6() {
     let val = cbor4ii::core::Value::Null;
     let ret = cbor4ii::serde::to_vec(vec![], &val).unwrap();

@@ -1,6 +1,6 @@
 [package]
 name = "cbor4ii"
-version = "0.2.6"
+version = "0.2.7"
 authors = ["quininer <quininer@live.com>"]
 description = "CBOR: Concise Binary Object Representation"
 repository = "https://github.com/quininer/cbor4ii"
@@ -11,7 +11,7 @@ edition = "2018"
 
 [features]
 use_std = [ "serde/std", "use_alloc" ]
-use_alloc = [ "serde/alloc" ]
+use_alloc = []
 half-f16 = [ "half" ]
 serde1 = [ "serde", "use_alloc" ]
 serde1-value = [ "serde1", "serde/derive" ]
