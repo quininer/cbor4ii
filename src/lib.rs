@@ -7,11 +7,9 @@ extern crate alloc;
 #[cfg(all(feature = "use_std", feature = "use_alloc"))]
 use std as alloc;
 
+mod util;
 mod error;
 pub mod core;
-
-#[cfg(feature = "use_alloc")]
-mod util;
 
 #[cfg(feature = "serde1")]
 pub mod serde;

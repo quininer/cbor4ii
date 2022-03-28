@@ -431,3 +431,46 @@ fn test_serde_regression_issue6() {
     let ret = cbor4ii::serde::to_vec(vec![], &val).unwrap();
     assert_eq!(ret, vec![0xf6]);
 }
+
+#[test]
+#[cfg(feature = "serde1-value")]
+fn test_serde_regression_any_f64() {
+    #[derive(Serialize, Deserialize, Debug, PartialEq)]
+    #[serde(untagged)]
+    enum AnyF64 {
+        F64(f64),
+        Str(String)
+    }
+
+
+    let anyf64 = AnyF64::F64(99.);
+    let buf = to_vec(Vec::new(), &anyf64).unwrap();
+    assert_eq!(anyf64, de(&buf, &anyf64));
+}
+
+#[test]
+fn test_serde_ignore_any_simple() {
+    #[derive(Serialize, Debug, PartialEq)]
+    struct Bar {
+        a: f64,
+        b: f64,
+        c: bool
+    }
+
+    #[derive(Deserialize, Debug, PartialEq)]
+    struct Baz {
+        b: f64,
+        c: bool
+    }
+
+    let bar = Bar {
+        a: 1.,
+        b: 2.,
+        c: true
+    };
+    let bar_bytes = to_vec(Vec::new(), &bar).unwrap();
+    let baz: Baz = from_slice(&bar_bytes).unwrap();
+
+    assert_eq!(bar.b, baz.b);
+    assert_eq!(bar.c, baz.c);
+}

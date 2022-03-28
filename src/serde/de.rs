@@ -93,7 +93,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
                     visitor.visit_f32(v.into())
                 },
                 marker::F32 => de.deserialize_f32(visitor),
-                marker::F64 => de.deserialize_f32(visitor),
+                marker::F64 => de.deserialize_f64(visitor),
                 _ => Err(dec::Error::Unsupported { byte })
             },
             _ => Err(dec::Error::Unsupported { byte })
@@ -295,57 +295,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let mut de = self.try_step()?;
-        let byte = dec::peek_one(&mut de.reader)?;
-
-        match byte >> 5 {
-            major @ major::UNSIGNED | major @ major::NEGATIVE => {
-                let skip = match byte & !(major << 5) {
-                    0 ..= 0x17 => 1,
-                    0x18 => 2,
-                    0x19 => 3,
-                    0x1a => 5,
-                    0x1b => 9,
-                    _ => return Err(dec::Error::TypeMismatch {
-                        name: "any",
-                        byte
-                    })
-                };
-                skip_exact(&mut de.reader, skip)?;
-            },
-            major @ major::BYTES | major @ major::STRING |
-            major @ major::ARRAY | major @ major::MAP => {
-                de.reader.advance(1);
-
-                if let Some(len) = dec::decode_len(major, byte, &mut de.reader)? {
-                    match major {
-                        major::BYTES | major::STRING => skip_exact(&mut de.reader, len)?,
-                        major::ARRAY | major::MAP => for _ in 0..len {
-                            de.deserialize_ignored_any(de::IgnoredAny)?;
-
-                            if major == major::MAP {
-                                de.deserialize_ignored_any(de::IgnoredAny)?;
-                            }
-                        },
-                        _ => ()
-                    }
-                } else {
-                    while dec::peek_one(&mut de.reader)? != marker::BREAK {
-                        de.deserialize_ignored_any(de::IgnoredAny)?;
-
-                        if major == major::MAP {
-                            de.deserialize_ignored_any(de::IgnoredAny)?;
-                        }
-                    }
-                }
-            },
-            major @ major::TAG => {
-                let _tag = dec::TypeNum::new(!(major << 5), byte).decode_u8(&mut de.reader)?;
-                de.deserialize_ignored_any(de::IgnoredAny)?;
-            },
-            _ => return de.deserialize_any(visitor)
-        }
-
+        let _ignore = dec::IgnoredAny::decode(&mut self.reader)?;
         visitor.visit_unit()
     }
 
@@ -548,18 +498,4 @@ where
 
         self.de.deserialize_map(visitor)
     }
-}
-
-#[inline]
-fn skip_exact<'de, R: dec::Read<'de>>(reader: &mut R, mut len: usize) -> Result<(), R::Error> {
-    while len != 0 {
-        let buf = reader.fill(len)?;
-        let buf = buf.as_ref();
-
-        let buflen = core::cmp::min(len, buf.len());
-        reader.advance(buflen);
-        len -= buflen;
-    }
-
-    Ok(())
 }

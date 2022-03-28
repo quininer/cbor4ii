@@ -2,13 +2,12 @@
 
 use core::convert::TryFrom;
 use crate::core::{ major, marker, types };
+use crate::util::ScopeGuard;
 pub use crate::error::DecodeError as Error;
 
 #[cfg(feature = "use_alloc")]
 use crate::alloc::{ vec::Vec, string::String };
 
-#[cfg(feature = "use_alloc")]
-use crate::util::ScopeGuard;
 
 /// Read trait
 ///
@@ -147,6 +146,20 @@ fn pull_exact<'a, R: Read<'a>>(reader: &mut R, mut buf: &mut [u8]) -> Result<(),
         buf[..len].copy_from_slice(&readbuf[..len]);
         reader.advance(len);
         buf = &mut buf[len..];
+    }
+
+    Ok(())
+}
+
+#[inline]
+fn skip_exact<'de, R: Read<'de>>(reader: &mut R, mut len: usize) -> Result<(), R::Error> {
+    while len != 0 {
+        let buf = reader.fill(len)?;
+        let buf = buf.as_ref();
+
+        let buflen = core::cmp::min(len, buf.len());
+        reader.advance(buflen);
+        len -= buflen;
     }
 
     Ok(())
@@ -779,5 +792,76 @@ pub fn is_break<'a, R: Read<'a>>(reader: &mut R) -> Result<bool, Error<R::Error>
         Ok(true)
     } else {
         Ok(false)
+    }
+}
+
+/// Ignore an arbitrary object
+pub struct IgnoredAny;
+
+impl<'a> Decode<'a> for IgnoredAny {
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        if !reader.step_in() {
+            return Err(Error::DepthLimit);
+        }
+        let mut reader = ScopeGuard(reader, |reader| reader.step_out());
+        let reader = &mut *reader;
+
+        match byte >> 5 {
+            major @ major::UNSIGNED | major @ major::NEGATIVE => {
+                let skip = match byte & !(major << 5) {
+                    0 ..= 0x17 => 0,
+                    0x18 => 1,
+                    0x19 => 2,
+                    0x1a => 4,
+                    0x1b => 8,
+                    _ => return Err(Error::TypeMismatch {
+                        name: "ignore-any",
+                        byte
+                    })
+                };
+                skip_exact(reader, skip)?;
+            },
+            major @ major::BYTES | major @ major::STRING |
+            major @ major::ARRAY | major @ major::MAP => {
+                if let Some(len) = decode_len(major, byte, reader)? {
+                    match major {
+                        major::BYTES | major::STRING => skip_exact(reader, len)?,
+                        major::ARRAY | major::MAP => for _ in 0..len {
+                            let _ignore = IgnoredAny::decode(reader)?;
+
+                            if major == major::MAP {
+                                let _ignore = IgnoredAny::decode(reader)?;
+                            }
+                        },
+                        _ => ()
+                    }
+                } else {
+                    while !is_break(reader)? {
+                        let _ignore = IgnoredAny::decode(reader)?;
+
+                        if major == major::MAP {
+                            let _ignore = IgnoredAny::decode(reader)?;
+                        }
+                    }
+                }
+            },
+            major @ major::TAG => {
+                let _tag = TypeNum::new(!(major << 5), byte).decode_u8(reader)?;
+                let _ignore = IgnoredAny::decode(reader)?;
+            },
+            major::SIMPLE => match byte {
+                marker::FALSE
+                    | marker::TRUE
+                    | marker::NULL
+                    | marker::UNDEFINED => (),
+                marker::F16 => skip_exact(reader, 2)?,
+                marker::F32 => skip_exact(reader, 4)?,
+                marker::F64 => skip_exact(reader, 8)?,
+                _ => return Err(Error::Unsupported { byte })
+            },
+            _ => return Err(Error::Unsupported { byte })
+        }
+
+        Ok(IgnoredAny)
     }
 }
