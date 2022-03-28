@@ -8,7 +8,8 @@ pub mod dec;
 use crate::alloc::{ vec::Vec, boxed::Box, string::String };
 
 
-pub(crate) mod major {
+/// Major type
+pub mod major {
     pub const UNSIGNED: u8 = 0;
     pub const NEGATIVE: u8 = 1;
     pub const BYTES:    u8 = 2;

@@ -279,7 +279,7 @@ macro_rules! decode_ix {
             impl<'a> Decode<'a> for $t {
                 #[inline]
                 fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
-                    match byte >> 5 {
+                    match if_major(byte) {
                         major::UNSIGNED => {
                             let v = TypeNum::new(!(major::UNSIGNED << 5), byte).$decode_fn(reader)?;
                             <$t>::try_from(v).map_err(Error::CastOverflow)
@@ -341,7 +341,7 @@ fn decode_x128<'a, R: Read<'a>>(name: &'static str, reader: &mut R) -> Result<[u
 impl<'a> Decode<'a> for u128 {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
-        if byte >> 5 == major::UNSIGNED {
+        if if_major(byte) == major::UNSIGNED {
             u64::decode_with(byte, reader).map(Into::into)
         } else {
             let tag = TypeNum::new(!(major::TAG << 5), byte).decode_u8(reader)?;
@@ -361,7 +361,7 @@ impl<'a> Decode<'a> for u128 {
 impl<'a> Decode<'a> for i128 {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
-        match byte >> 5 {
+        match if_major(byte) {
             major::UNSIGNED => u64::decode_with(byte, reader).map(Into::into),
             major::NEGATIVE => i64::decode_with(byte, reader).map(Into::into),
             _ => {
@@ -785,16 +785,6 @@ impl<'a> Decode<'a> for f64 {
     }
 }
 
-#[inline]
-pub fn is_break<'a, R: Read<'a>>(reader: &mut R) -> Result<bool, Error<R::Error>> {
-    if peek_one(reader)? == marker::BREAK {
-        reader.advance(1);
-        Ok(true)
-    } else {
-        Ok(false)
-    }
-}
-
 /// Ignore an arbitrary object
 pub struct IgnoredAny;
 
@@ -806,7 +796,7 @@ impl<'a> Decode<'a> for IgnoredAny {
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());
         let reader = &mut *reader;
 
-        match byte >> 5 {
+        match if_major(byte) {
             major @ major::UNSIGNED | major @ major::NEGATIVE => {
                 let skip = match byte & !(major << 5) {
                     0 ..= 0x17 => 0,
@@ -864,4 +854,20 @@ impl<'a> Decode<'a> for IgnoredAny {
 
         Ok(IgnoredAny)
     }
+}
+
+#[inline]
+pub fn is_break<'a, R: Read<'a>>(reader: &mut R) -> Result<bool, Error<R::Error>> {
+    if peek_one(reader)? == marker::BREAK {
+        reader.advance(1);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Determine the object type from the given byte.
+#[inline]
+pub fn if_major(byte: u8) -> u8 {
+    byte >> 5
 }

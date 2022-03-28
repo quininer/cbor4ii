@@ -59,7 +59,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         let de = &mut *de;
 
         let byte = dec::peek_one(&mut de.reader)?;
-        match byte >> 5 {
+        match dec::if_major(byte) {
             major::UNSIGNED => de.deserialize_u64(visitor),
             major::NEGATIVE => de.deserialize_i64(visitor),
             major::BYTES => de.deserialize_byte_buf(visitor),
@@ -425,7 +425,7 @@ impl<'de, 'a, R: dec::Read<'de>> EnumAccessor<'a, R> {
         -> Result<EnumAccessor<'a, R>, dec::Error<R::Error>>
     {
         let byte = dec::peek_one(&mut de.reader)?;
-        match byte >> 5 {
+        match dec::if_major(byte) {
             // string
             major::STRING => Ok(EnumAccessor { de }),
             // 1 length map
