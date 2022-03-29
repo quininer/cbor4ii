@@ -177,7 +177,7 @@ impl TypeNum {
     }
 
     #[inline]
-    pub(crate) fn decode_u8<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u8, Error<R::Error>> {
+    pub fn decode_u8<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u8, Error<R::Error>> {
         match self.byte & self.major_limit {
             x @ 0 ..= 0x17 => Ok(x),
             0x18 => pull_one(reader),
@@ -836,7 +836,7 @@ impl<'a> Decode<'a> for IgnoredAny {
                 }
             },
             major @ major::TAG => {
-                let _tag = TypeNum::new(!(major << 5), byte).decode_u8(reader)?;
+                let _tag = TypeNum::new(!(major << 5), byte).decode_u64(reader)?;
                 let _ignore = IgnoredAny::decode(reader)?;
             },
             major::SIMPLE => match byte {

@@ -215,3 +215,30 @@ fn test_mut_ref_write_read() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_regression_ignore_tag() {
+    let tag = Value::Tag(u64::MAX - 1, Box::new(Value::Text("hello world".into())));
+
+    let mut buf = BufWriter(Vec::new());
+    tag.encode(&mut buf).unwrap();
+
+    {
+        let mut reader = SliceReader {
+            buf: &buf.0,
+            limit: 256
+        };
+
+        let tag2 = Value::decode(&mut reader).unwrap();
+        assert_eq!(tag, tag2);
+    }
+
+    {
+        let mut reader = SliceReader {
+            buf: &buf.0,
+            limit: 256
+        };
+
+        let _ignored = dec::IgnoredAny::decode(&mut reader).unwrap();
+    }
+}
