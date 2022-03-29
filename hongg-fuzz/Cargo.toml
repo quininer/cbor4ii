@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 honggfuzz = "0.5"
 serde = "1"
-cbor4ii = { path = "..", features = [ "serde1-value" ] }
+cbor4ii = { path = "..", features = [ "serde1", "use_std" ] }

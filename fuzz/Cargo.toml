@@ -13,7 +13,7 @@ libfuzzer-sys = "0.4"
 
 [dependencies.cbor4ii]
 path = ".."
-features = [ "serde1-value" ]
+features = [ "serde1", "use_std" ]
 
 # Prevent this from interfering with workspaces
 [workspace]
