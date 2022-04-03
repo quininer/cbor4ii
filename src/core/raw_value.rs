@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 use crate::core::{ enc, dec };
 
 
-pub struct RawValue<'de>(&'de [u8]);
+pub struct RawValue<'de>(u8, &'de [u8]);
 
 struct RawValueReader<'r, 'de, R>
 where R: dec::Read<'de>
@@ -86,13 +86,14 @@ impl<'de> dec::Decode<'de> for RawValue<'de> {
             })
         };
 
-        Ok(RawValue(buf))
+        Ok(RawValue(byte, buf))
     }
 }
 
 impl<'de> enc::Encode for RawValue<'de> {
     #[inline]
     fn encode<W: enc::Write>(&self, writer: &mut W) -> Result<(), enc::Error<W::Error>> {
-        writer.push(self.0).map_err(enc::Error::Write)
+        writer.push(&[self.0]).map_err(enc::Error::Write)?;
+        writer.push(self.1).map_err(enc::Error::Write)
     }
 }
