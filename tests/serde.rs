@@ -144,7 +144,6 @@ fn test_serde_enum_flatten() {
 }
 
 #[test]
-#[cfg(feature = "serde1")]
 fn test_serde_value() {
     use cbor4ii::core::Value;
 
@@ -425,7 +424,6 @@ fn test_serde_regression_issue4() {
 }
 
 #[test]
-#[cfg(feature = "serde1")]
 fn test_serde_regression_issue6() {
     let val = cbor4ii::core::Value::Null;
     let ret = cbor4ii::serde::to_vec(vec![], &val).unwrap();
@@ -433,7 +431,6 @@ fn test_serde_regression_issue6() {
 }
 
 #[test]
-#[cfg(feature = "serde1")]
 fn test_serde_regression_any_f64() {
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     #[serde(untagged)]
