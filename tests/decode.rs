@@ -242,3 +242,18 @@ fn test_regression_ignore_tag() {
         let _ignored = dec::IgnoredAny::decode(&mut reader).unwrap();
     }
 }
+
+#[test]
+fn test_regression_min_i64() {
+    let mut buf = BufWriter(Vec::new());
+    i64::MIN.encode(&mut buf).unwrap();
+
+    let mut reader = SliceReader {
+        buf: &buf.0,
+        limit: 256
+    };
+
+    let min_i64 = i64::decode(&mut reader).unwrap();
+
+    assert_eq!(min_i64, i64::MIN);
+}
