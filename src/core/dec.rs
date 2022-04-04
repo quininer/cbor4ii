@@ -286,11 +286,12 @@ macro_rules! decode_ix {
                         },
                         major::NEGATIVE => {
                             let v = TypeNum::new(!(major::NEGATIVE << 5), byte).$decode_fn(reader)?;
-                            let v = v.checked_add(1)
-                                .ok_or(Error::Overflow { name: stringify!($t) })?;
                             let v = <$t>::try_from(v)
                                 .map_err(Error::CastOverflow)?;
-                            Ok(-v)
+                            let v = -v;
+                            let v = v.checked_sub(1)
+                                .ok_or(Error::Overflow { name: stringify!($t) })?;
+                            Ok(v)
                         },
                         _ => Err(Error::TypeMismatch {
                             name: stringify!($t),
