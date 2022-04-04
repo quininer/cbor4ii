@@ -377,10 +377,11 @@ impl<'a> Decode<'a> for i128 {
                     3 => {
                         let buf = decode_x128("i128<negative>::bytes", reader)?;
                         let n = u128::from_be_bytes(buf);
-                        let n = n.checked_add(1)
-                            .ok_or(Error::Overflow { name: "i128" })?;
                         let n = i128::try_from(n).map_err(Error::CastOverflow)?;
-                        Ok(-n)
+                        let n = -n;
+                        let n = n.checked_sub(1)
+                            .ok_or(Error::Overflow { name: "i128" })?;
+                        Ok(n)
                     },
                     _ => Err(Error::TypeMismatch {
                         name: "i128",

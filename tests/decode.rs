@@ -257,3 +257,18 @@ fn test_regression_min_i64() {
 
     assert_eq!(min_i64, i64::MIN);
 }
+
+#[test]
+fn test_regression_min_i128() {
+    let mut buf = BufWriter(Vec::new());
+    i128::MIN.encode(&mut buf).unwrap();
+
+    let mut reader = SliceReader {
+        buf: &buf.0,
+        limit: 256
+    };
+
+    let min_i128 = i128::decode(&mut reader).unwrap();
+
+    assert_eq!(min_i128, i128::MIN);
+}
