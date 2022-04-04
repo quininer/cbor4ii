@@ -474,3 +474,10 @@ fn test_serde_ignore_any_simple() {
     assert_eq!(bar.b, baz.b);
     assert_eq!(bar.c, baz.c);
 }
+
+#[test]
+fn test_regression_min_i64() {
+    let buf = to_vec(Vec::new(), &i64::MIN).unwrap();
+    let min_i64: i64 = from_slice(&buf).unwrap();
+    assert_eq!(min_i64, i64::MIN);
+}
