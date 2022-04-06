@@ -32,6 +32,52 @@ pub(crate) mod marker {
     pub const BREAK: u8   = 0xff;
 }
 
+
+#[cfg(feature = "use_alloc")]
+pub mod buf_writer {
+    use crate::alloc::{ collections::TryReserveError, vec::Vec};
+    use crate::core::enc;
+
+    /// An in-memory writer.
+    pub struct BufWriter(Vec<u8>);
+
+    impl BufWriter {
+        /// Creates a new writer.
+        pub fn new(buf: Vec<u8>) -> Self {
+           BufWriter(buf)
+        }
+
+        /// Returns a reference to the underlying data.
+        pub fn buffer(&self) -> &[u8] {
+            &self.0
+        }
+
+        /// Returns the underlying vector.
+        pub fn into_inner(self) -> Vec<u8> {
+            self.0
+        }
+
+        /// Discards the underlying data.
+        pub fn clear(&mut self) {
+            self.0.clear();
+        }
+    }
+
+    impl enc::Write for BufWriter {
+        type Error = TryReserveError;
+
+        #[inline]
+        fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
+            self.0.try_reserve(input.len())?;
+            self.0.extend_from_slice(input);
+            Ok(())
+        }
+    }
+
+}
+
+#[cfg(feature = "use_alloc")] pub use buf_writer::BufWriter;
+
 #[cfg(feature = "use_alloc")]
 #[derive(Debug, PartialEq)]
 #[non_exhaustive]

@@ -39,31 +39,18 @@ mod buf_writer {
     use crate::alloc::vec::Vec;
     use crate::alloc::collections::TryReserveError;
     use serde::Serialize;
-    use crate::core::enc;
+    use crate::core::{enc, BufWriter};
     use crate::serde::ser;
-
-    struct BufWriter(Vec<u8>);
-
-    impl enc::Write for BufWriter {
-        type Error = TryReserveError;
-
-        #[inline]
-        fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
-            self.0.try_reserve(input.len())?;
-            self.0.extend_from_slice(input);
-            Ok(())
-        }
-    }
 
     /// Serializes a value to a writer.
     pub fn to_vec<T>(buf: Vec<u8>, value: &T)
         -> Result<Vec<u8>, enc::Error<TryReserveError>>
     where T: Serialize
     {
-        let writer = BufWriter(buf);
+        let writer = BufWriter::new(buf);
         let mut writer = ser::Serializer::new(writer);
         value.serialize(&mut writer)?;
-        Ok(writer.into_inner().0)
+        Ok(writer.into_inner().into_inner())
     }
 }
 

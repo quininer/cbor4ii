@@ -1,9 +1,8 @@
-#![cfg(feature = "use_alloc")]
+#![cfg(feature = "use_std")]
 
-use std::collections::TryReserveError;
 use std::convert::Infallible;
 use anyhow::Context;
-use cbor4ii::core::Value;
+use cbor4ii::core::{BufWriter, Value};
 use cbor4ii::core::enc::{ self, Encode };
 use cbor4ii::core::dec::{ self, Decode };
 
@@ -73,30 +72,16 @@ fn test_decode_value() {
     }
 }
 
-
-struct BufWriter(Vec<u8>);
-
-impl enc::Write for BufWriter {
-    type Error = TryReserveError;
-
-    #[inline]
-    fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
-        self.0.try_reserve(input.len())?;
-        self.0.extend_from_slice(input);
-        Ok(())
-    }
-}
-
 #[test]
 fn test_decode_buf_segment() -> anyhow::Result<()> {
-    let mut writer = BufWriter(Vec::new());
+    let mut writer = BufWriter::new(Vec::new());
     enc::StrStart.encode(&mut writer)?;
     "test".encode(&mut writer)?;
     "test2".encode(&mut writer)?;
     "test3".encode(&mut writer)?;
     enc::End.encode(&mut writer)?;
 
-    let mut reader = SliceReader::new(&writer.0);
+    let mut reader = SliceReader::new(writer.buffer());
     let output = String::decode(&mut reader)?;
     assert_eq!("testtest2test3", output);
 
@@ -105,7 +90,7 @@ fn test_decode_buf_segment() -> anyhow::Result<()> {
 
 #[test]
 fn test_decode_bad_reader_buf() -> anyhow::Result<()> {
-    let mut writer = BufWriter(Vec::new());
+    let mut writer = BufWriter::new(Vec::new());
     "test".encode(&mut writer)?;
 
     struct LongReader<'a>(&'a [u8]);
@@ -125,8 +110,9 @@ fn test_decode_bad_reader_buf() -> anyhow::Result<()> {
         }
     }
 
-    writer.0.resize(1024, 0);
-    let mut reader = LongReader(&writer.0);
+    let mut buf = writer.into_inner();
+    buf.resize(1024, 0);
+    let mut reader = LongReader(&buf);
     let output = String::decode(&mut reader)?;
     assert_eq!("test", output);
 
@@ -136,10 +122,10 @@ fn test_decode_bad_reader_buf() -> anyhow::Result<()> {
 #[test]
 fn test_decode_array_map() -> anyhow::Result<()> {
     // array bounded
-    let mut writer = BufWriter(Vec::new());
+    let mut writer = BufWriter::new(Vec::new());
     (&[0u32, 1, 2, 3, 4, 5][..]).encode(&mut writer)?;
 
-    let mut reader = SliceReader::new(&writer.0);
+    let mut reader = SliceReader::new(writer.buffer());
     let dec::ArrayStart(len) = dec::ArrayStart::decode(&mut reader)?;
     let len = len.context("expect len")?;
     for i in 0..len {
@@ -148,14 +134,14 @@ fn test_decode_array_map() -> anyhow::Result<()> {
     }
 
     // map unbounded
-    let mut writer = BufWriter(Vec::new());
+    let mut writer = BufWriter::new(Vec::new());
     enc::MapStartUnbounded.encode(&mut writer)?;
     for i in 0u64..6 {
         i.encode(&mut writer)?;
     }
     enc::End.encode(&mut writer)?;
 
-    let mut reader = SliceReader::new(&writer.0);
+    let mut reader = SliceReader::new(writer.buffer());
     let dec::MapStart(len) = dec::MapStart::decode(&mut reader)?;
     assert_eq!(len, None);
     let mut count = 0u64;
@@ -180,10 +166,10 @@ fn test_value_i128() -> anyhow::Result<()> {
 
     let n = u64::MAX as i128 + 99;
 
-    let mut writer = BufWriter(Vec::new());
+    let mut writer = BufWriter::new(Vec::new());
     Value::Integer(n).encode(&mut writer)?;
 
-    let mut reader = SliceReader::new(&writer.0);
+    let mut reader = SliceReader::new(writer.buffer());
     let value = Value::decode(&mut reader)?;
 
     let int_bytes = n.to_be_bytes();
@@ -205,10 +191,10 @@ fn test_mut_ref_write_read() -> anyhow::Result<()> {
 
     let input = "123";
 
-    let mut writer = BufWriter(Vec::new());
+    let mut writer = BufWriter::new(Vec::new());
     test_write_str(&mut writer, input);
 
-    let mut reader = SliceReader::new(&writer.0);
+    let mut reader = SliceReader::new(writer.buffer());
     let output = test_read_str(&mut reader);
 
     assert_eq!(input, output);
@@ -220,12 +206,12 @@ fn test_mut_ref_write_read() -> anyhow::Result<()> {
 fn test_regression_ignore_tag() {
     let tag = Value::Tag(u64::MAX - 1, Box::new(Value::Text("hello world".into())));
 
-    let mut buf = BufWriter(Vec::new());
+    let mut buf = BufWriter::new(Vec::new());
     tag.encode(&mut buf).unwrap();
 
     {
         let mut reader = SliceReader {
-            buf: &buf.0,
+            buf: buf.buffer(),
             limit: 256
         };
 
@@ -235,7 +221,7 @@ fn test_regression_ignore_tag() {
 
     {
         let mut reader = SliceReader {
-            buf: &buf.0,
+            buf: buf.buffer(),
             limit: 256
         };
 
@@ -245,11 +231,11 @@ fn test_regression_ignore_tag() {
 
 #[test]
 fn test_regression_min_i64() {
-    let mut buf = BufWriter(Vec::new());
+    let mut buf = BufWriter::new(Vec::new());
     i64::MIN.encode(&mut buf).unwrap();
 
     let mut reader = SliceReader {
-        buf: &buf.0,
+        buf: buf.buffer(),
         limit: 256
     };
 
@@ -260,11 +246,11 @@ fn test_regression_min_i64() {
 
 #[test]
 fn test_regression_min_i128() {
-    let mut buf = BufWriter(Vec::new());
+    let mut buf = BufWriter::new(Vec::new());
     i128::MIN.encode(&mut buf).unwrap();
 
     let mut reader = SliceReader {
-        buf: &buf.0,
+        buf: buf.buffer(),
         limit: 256
     };
 
