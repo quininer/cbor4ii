@@ -1,6 +1,5 @@
 #![no_main]
 
-use std::convert::Infallible;
 use libfuzzer_sys::fuzz_target;
 use cbor4ii::core::Value;
 use cbor4ii::core::dec::{ self, Decode };
