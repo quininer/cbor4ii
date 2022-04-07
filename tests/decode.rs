@@ -2,52 +2,10 @@
 
 use std::convert::Infallible;
 use anyhow::Context;
-use cbor4ii::core::{BufWriter, Value};
+use cbor4ii::core::Value;
 use cbor4ii::core::enc::{ self, Encode };
 use cbor4ii::core::dec::{ self, Decode };
-
-
-struct SliceReader<'a> {
-    buf: &'a [u8],
-    limit: usize
-}
-
-impl SliceReader<'_> {
-    fn new(buf: &[u8]) -> SliceReader<'_> {
-        SliceReader { buf, limit: 256 }
-    }
-}
-
-impl<'de> dec::Read<'de> for SliceReader<'de> {
-    type Error = Infallible;
-
-    #[inline]
-    fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
-        let len = core::cmp::min(self.buf.len(), want);
-        Ok(dec::Reference::Long(&self.buf[..len]))
-    }
-
-    #[inline]
-    fn advance(&mut self, n: usize) {
-        let len = core::cmp::min(self.buf.len(), n);
-        self.buf = &self.buf[len..];
-    }
-
-    #[inline]
-    fn step_in(&mut self) -> bool {
-        if let Some(limit) = self.limit.checked_sub(1) {
-            self.limit = limit;
-            true
-        } else {
-            false
-        }
-    }
-
-    #[inline]
-    fn step_out(&mut self) {
-        self.limit += 1;
-    }
-}
+use cbor4ii::core::utils::{ BufWriter, SliceReader };
 
 #[test]
 fn test_decode_value() {
@@ -210,21 +168,13 @@ fn test_regression_ignore_tag() {
     tag.encode(&mut buf).unwrap();
 
     {
-        let mut reader = SliceReader {
-            buf: buf.buffer(),
-            limit: 256
-        };
-
+        let mut reader = SliceReader::new(buf.buffer());
         let tag2 = Value::decode(&mut reader).unwrap();
         assert_eq!(tag, tag2);
     }
 
     {
-        let mut reader = SliceReader {
-            buf: buf.buffer(),
-            limit: 256
-        };
-
+        let mut reader = SliceReader::new(buf.buffer());
         let _ignored = dec::IgnoredAny::decode(&mut reader).unwrap();
     }
 }
@@ -234,11 +184,7 @@ fn test_regression_min_i64() {
     let mut buf = BufWriter::new(Vec::new());
     i64::MIN.encode(&mut buf).unwrap();
 
-    let mut reader = SliceReader {
-        buf: buf.buffer(),
-        limit: 256
-    };
-
+    let mut reader = SliceReader::new(buf.buffer());
     let min_i64 = i64::decode(&mut reader).unwrap();
 
     assert_eq!(min_i64, i64::MIN);
@@ -249,11 +195,7 @@ fn test_regression_min_i128() {
     let mut buf = BufWriter::new(Vec::new());
     i128::MIN.encode(&mut buf).unwrap();
 
-    let mut reader = SliceReader {
-        buf: buf.buffer(),
-        limit: 256
-    };
-
+    let mut reader = SliceReader::new(buf.buffer());
     let min_i128 = i128::decode(&mut reader).unwrap();
 
     assert_eq!(min_i128, i128::MIN);

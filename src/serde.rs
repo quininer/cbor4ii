@@ -39,7 +39,8 @@ mod buf_writer {
     use crate::alloc::vec::Vec;
     use crate::alloc::collections::TryReserveError;
     use serde::Serialize;
-    use crate::core::{enc, BufWriter};
+    use crate::core::enc;
+    use crate::core::utils::BufWriter;
     use crate::serde::ser;
 
     /// Serializes a value to a writer.
@@ -57,50 +58,15 @@ mod buf_writer {
 mod slice_reader {
     use core::convert::Infallible;
     use crate::core::dec;
+    use crate::core::utils::SliceReader;
     use crate::serde::de;
-
-    struct SliceReader<'a> {
-        buf: &'a [u8],
-        limit: usize
-    }
-
-    impl<'de> dec::Read<'de> for SliceReader<'de> {
-        type Error = Infallible;
-
-        #[inline]
-        fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
-            let len = core::cmp::min(self.buf.len(), want);
-            Ok(dec::Reference::Long(&self.buf[..len]))
-        }
-
-        #[inline]
-        fn advance(&mut self, n: usize) {
-            let len = core::cmp::min(self.buf.len(), n);
-            self.buf = &self.buf[len..];
-        }
-
-        #[inline]
-        fn step_in(&mut self) -> bool {
-            if let Some(limit) = self.limit.checked_sub(1) {
-                self.limit = limit;
-                true
-            } else {
-                false
-            }
-        }
-
-        #[inline]
-        fn step_out(&mut self) {
-            self.limit += 1;
-        }
-    }
 
     /// Decodes a value from a bytes.
     pub fn from_slice<'a, T>(buf: &'a [u8]) -> Result<T, dec::Error<Infallible>>
     where
         T: serde::Deserialize<'a>,
     {
-        let reader = SliceReader { buf, limit: 256 };
+        let reader = SliceReader::new(buf);
         let mut deserializer = de::Deserializer::new(reader);
         serde::Deserialize::deserialize(&mut deserializer)
     }
