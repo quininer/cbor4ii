@@ -16,6 +16,10 @@ impl<W> Serializer<W> {
     pub fn into_inner(self) -> W {
         self.writer
     }
+
+    pub fn writer(&mut self) -> &mut W {
+        &mut self.writer
+    }
 }
 
 impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
