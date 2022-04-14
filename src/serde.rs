@@ -8,18 +8,8 @@ mod io_writer {
     use std::io;
     use serde::Serialize;
     use crate::core::enc;
+    use crate::core::utils::IoWriter;
     use crate::serde::ser;
-
-    struct IoWrite<W>(W);
-
-    impl<W: io::Write> enc::Write for IoWrite<W> {
-        type Error = io::Error;
-
-        #[inline]
-        fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
-            self.0.write_all(input)
-        }
-    }
 
     /// Serializes a value to a writer.
     pub fn to_writer<W, T>(writer: &mut W, value: &T)
@@ -28,7 +18,7 @@ mod io_writer {
         W: io::Write,
         T: Serialize
     {
-        let writer = IoWrite(writer);
+        let writer = IoWriter::new(writer);
         let mut writer = ser::Serializer::new(writer);
         value.serialize(&mut writer)
     }
@@ -76,42 +66,8 @@ mod slice_reader {
 mod io_buf_reader {
     use std::io::{ self, BufRead };
     use crate::core::dec;
+    use crate::core::utils::IoReader;
     use crate::serde::de;
-
-    struct IoReader<R> {
-        reader: R,
-        limit: usize
-    }
-
-    impl<'de, R: BufRead> dec::Read<'de> for IoReader<R> {
-        type Error = io::Error;
-
-        #[inline]
-        fn fill<'b>(&'b mut self, _want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
-            let buf = self.reader.fill_buf()?;
-            Ok(dec::Reference::Short(buf))
-        }
-
-        #[inline]
-        fn advance(&mut self, n: usize) {
-            self.reader.consume(n);
-        }
-
-        #[inline]
-        fn step_in(&mut self) -> bool {
-            if let Some(limit) = self.limit.checked_sub(1) {
-                self.limit = limit;
-                true
-            } else {
-                false
-            }
-        }
-
-        #[inline]
-        fn step_out(&mut self) {
-            self.limit += 1;
-        }
-    }
 
     /// Decodes a value from a reader.
     pub fn from_reader<T, R>(reader: R) -> Result<T, dec::Error<io::Error>>
@@ -119,7 +75,7 @@ mod io_buf_reader {
         T: serde::de::DeserializeOwned,
         R: BufRead
     {
-        let reader = IoReader { reader, limit: 256 };
+        let reader = IoReader::new(reader);
         let mut deserializer = de::Deserializer::new(reader);
         serde::Deserialize::deserialize(&mut deserializer)
     }
