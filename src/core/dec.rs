@@ -584,7 +584,7 @@ impl<'a> Decode<'a> for types::BadStr<crate::alloc::borrow::Cow<'a, [u8]>> {
 }
 
 #[inline]
-pub(crate) fn decode_len<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R)
+fn decode_len<'a, R: Read<'a>>(major: u8, byte: u8, reader: &mut R)
     -> Result<Option<usize>, Error<R::Error>>
 {
     if byte != (marker::START | (major << 5)) {

@@ -314,25 +314,29 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
     pub fn array(de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
-        let byte = dec::pull_one(&mut de.reader)?;
-        let len = dec::decode_len(major::ARRAY, byte, &mut de.reader)?;
-        Ok(Accessor { de, len })
+        let array_start = dec::ArrayStart::decode(&mut de.reader)?;
+        Ok(Accessor {
+            de,
+            len: array_start.0,
+        })
     }
 
     #[inline]
     pub fn tuple(de: &'a mut Deserializer<R>, len: usize)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
-        let byte = dec::pull_one(&mut de.reader)?;
-        let arrlen = dec::decode_len(major::ARRAY, byte, &mut de.reader)?;
+        let array_start = dec::ArrayStart::decode(&mut de.reader)?;
 
-        if arrlen == Some(len) {
-            Ok(Accessor { de, len: arrlen })
+        if array_start.0 == Some(len) {
+            Ok(Accessor {
+                de,
+                len: array_start.0,
+            })
         } else {
             Err(dec::Error::RequireLength {
                 name: "tuple",
                 expect: len,
-                value: arrlen.unwrap_or(0)
+                value: array_start.0.unwrap_or(0),
             })
         }
     }
@@ -341,9 +345,11 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
     pub fn map(de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
-        let byte = dec::pull_one(&mut de.reader)?;
-        let len = dec::decode_len(major::MAP, byte, &mut de.reader)?;
-        Ok(Accessor { de, len })
+        let map_start = dec::MapStart::decode(&mut de.reader)?;
+        Ok(Accessor {
+            de,
+            len: map_start.0,
+        })
     }
 }
 
