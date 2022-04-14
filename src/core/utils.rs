@@ -95,6 +95,10 @@ impl<W> IoWriter<W> {
     pub fn new(writer: W) -> Self {
         IoWriter(writer)
     }
+
+    pub fn into_inner(self) -> W {
+        self.0
+    }
 }
 
 #[cfg(feature = "use_std")]
@@ -121,6 +125,10 @@ pub struct IoReader<R> {
 impl<R> IoReader<R> {
     pub fn new(reader: R) -> Self {
         Self { reader, limit: 256 }
+    }
+
+    pub fn into_inner(self) -> R {
+        self.reader
     }
 }
 
