@@ -200,3 +200,51 @@ fn test_regression_min_i128() {
 
     assert_eq!(min_i128, i128::MIN);
 }
+
+#[test]
+fn test_regression_max_neg_64_as_i128() {
+    let mut buf = BufWriter::new(Vec::new());
+    let max_neg_64 = -i128::from(u64::MAX) - 1;
+    max_neg_64.encode(&mut buf).unwrap();
+    assert_eq!(buf.buffer(), [0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
+
+    let mut reader = SliceReader::new(buf.buffer());
+    let decoded = i128::decode(&mut reader).unwrap();
+    assert_eq!(decoded, -18446744073709551616);
+}
+
+#[test]
+fn test_max_neg_32_as_i64() {
+    let mut buf = BufWriter::new(Vec::new());
+    let max_neg_32 = -i64::from(u32::MAX) - 1;
+    max_neg_32.encode(&mut buf).unwrap();
+    assert_eq!(buf.buffer(), [0x3a, 0xff, 0xff, 0xff, 0xff]);
+
+    let mut reader = SliceReader::new(buf.buffer());
+    let decoded = i64::decode(&mut reader).unwrap();
+    assert_eq!(decoded, -4294967296);
+}
+
+#[test]
+fn test_max_neg_16_as_i32() {
+    let mut buf = BufWriter::new(Vec::new());
+    let max_neg_16 = -i32::from(u16::MAX) - 1;
+    max_neg_16.encode(&mut buf).unwrap();
+    assert_eq!(buf.buffer(), [0x39, 0xff, 0xff]);
+
+    let mut reader = SliceReader::new(buf.buffer());
+    let decoded = i32::decode(&mut reader).unwrap();
+    assert_eq!(decoded, -65536);
+}
+
+#[test]
+fn test_max_neg_8_as_i16() {
+    let mut buf = BufWriter::new(Vec::new());
+    let max_neg_8 = -i16::from(u8::MAX) - 1;
+    max_neg_8.encode(&mut buf).unwrap();
+    assert_eq!(buf.buffer(), [0x38, 0xff]);
+
+    let mut reader = SliceReader::new(buf.buffer());
+    let decoded = i16::decode(&mut reader).unwrap();
+    assert_eq!(decoded, -256);
+}
