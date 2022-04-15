@@ -364,7 +364,15 @@ impl<'a> Decode<'a> for i128 {
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
         match if_major(byte) {
             major::UNSIGNED => u64::decode_with(byte, reader).map(Into::into),
-            major::NEGATIVE => i64::decode_with(byte, reader).map(Into::into),
+            major::NEGATIVE => {
+               // Negative numbers can be as big as 2^64, hence decode them as unsigned 64-bit
+               // value first.
+               let n = TypeNum::new(!(major::NEGATIVE << 5), byte).decode_u64(reader)?;
+               let n = i128::from(n);
+               let n = -n;
+               let n = n - 1;
+               Ok(n)
+            },
             _ => {
                 let tag = TypeNum::new(!(major::TAG << 5), byte).decode_u8(reader)?;
                 match tag {
