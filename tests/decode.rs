@@ -248,3 +248,23 @@ fn test_max_neg_8_as_i16() {
     let decoded = i16::decode(&mut reader).unwrap();
     assert_eq!(decoded, -256);
 }
+
+#[test]
+fn test_tag_start() {
+    let mut reader_tag_len1 = SliceReader::new(&[0xd8, 0x2a]);
+    let tag_len1 = dec::TagStart::decode(&mut reader_tag_len1).unwrap();
+    assert_eq!(tag_len1.0, 42);
+
+    let mut reader_tag_len2 = SliceReader::new(&[0xd9, 0x00, 0x2a]);
+    let tag_len2 = dec::TagStart::decode(&mut reader_tag_len2).unwrap();
+    assert_eq!(tag_len2.0, 42);
+
+    let mut reader_tag_len4 = SliceReader::new(&[0xda, 0x00, 0x00, 0x00, 0x2a]);
+    let tag_len4 = dec::TagStart::decode(&mut reader_tag_len4).unwrap();
+    assert_eq!(tag_len4.0, 42);
+
+    let mut reader_tag_len8 = SliceReader::new(
+        &[0xdb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2a]);
+    let tag_len8 = dec::TagStart::decode(&mut reader_tag_len8).unwrap();
+    assert_eq!(tag_len8.0, 42);
+}

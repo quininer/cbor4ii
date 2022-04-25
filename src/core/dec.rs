@@ -696,6 +696,15 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
     }
 }
 
+pub struct TagStart(pub u64);
+
+impl<'a> Decode<'a> for TagStart {
+    #[inline]
+    fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
+        TypeNum::new(!(major::TAG << 5), byte).decode_u64(reader).map(TagStart)
+    }
+}
+
 impl<'a, T: Decode<'a>> Decode<'a> for types::Tag<T> {
     #[inline]
     fn decode_with<R: Read<'a>>(byte: u8, reader: &mut R) -> Result<Self, Error<R::Error>> {
