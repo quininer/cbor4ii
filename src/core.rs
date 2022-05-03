@@ -1,5 +1,6 @@
 //! core module
 
+pub mod error;
 pub mod types;
 pub mod enc;
 pub mod dec;
