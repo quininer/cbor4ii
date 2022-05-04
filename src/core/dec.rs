@@ -427,7 +427,7 @@ fn decode_buf<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R
 {
     const CAP_LIMIT: usize = 16 * 1024;
 
-    if let Some(mut len) = decode_len(name, major, reader)? {
+    if let Some(len) = decode_len(name, major, reader)? {
         // try long lifetime buffer
         if let Reference::Long(buf) = reader.fill(len).map_err(Error::read)? {
             if buf.len() >= len {

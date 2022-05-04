@@ -72,14 +72,16 @@ impl<'de> dec::Decode<'de> for Value {
     fn decode<R: dec::Read<'de>>(reader: &mut R) -> Result<Self, dec::Error<R::Error>> {
         use crate::util::ScopeGuard;
 
+        let name = &"value";
+
         if !reader.step_in() {
-            return Err(dec::Error::DepthLimit);
+            return Err(dec::Error::depth_overflow(name));
         }
 
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());
         let reader = &mut *reader;
 
-        let byte = dec::peek_one(reader)?;
+        let byte = dec::peek_one(name, reader)?;
 
         match dec::if_major(byte) {
             major::UNSIGNED => u64::decode(reader)
@@ -87,9 +89,10 @@ impl<'de> dec::Decode<'de> for Value {
             major::NEGATIVE => {
                 let types::Negative(v) = <types::Negative<u64>>::decode(reader)?;
                 let v = i128::from(v);
-                let v = v.checked_add(1)
-                    .ok_or(dec::Error::Overflow { name: "Value::Integer" })?;
-                Ok(Value::Integer(-v))
+                let v = -v;
+                let v = v.checked_sub(1)
+                    .ok_or_else(|| dec::Error::arithmetic_overflow(name, error::ArithmeticOverflow::Underflow))?;
+                Ok(Value::Integer(v))
             },
             major::BYTES => <types::Bytes<Vec<u8>>>::decode(reader)
                 .map(|buf| Value::Bytes(buf.0)),
@@ -125,9 +128,9 @@ impl<'de> dec::Decode<'de> for Value {
                     .map(|v| Value::Float(v.into())),
                 marker::F64 => f64::decode(reader)
                     .map(Value::Float),
-                _ => Err(dec::Error::Unsupported { byte })
+                _ => Err(dec::Error::unsupported(name, byte))
             },
-            _ => Err(dec::Error::Unsupported { byte })
+            _ => Err(dec::Error::unsupported(name, byte))
         }
     }
 }

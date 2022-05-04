@@ -1,5 +1,6 @@
 //! serde support
 
+mod error;
 mod ser;
 #[cfg(feature = "use_alloc")] mod de;
 
@@ -47,12 +48,12 @@ mod buf_writer {
 
 mod slice_reader {
     use core::convert::Infallible;
-    use crate::core::dec;
     use crate::core::utils::SliceReader;
     use crate::serde::de;
+    use crate::serde::error::DecodeError;
 
     /// Decodes a value from a bytes.
-    pub fn from_slice<'a, T>(buf: &'a [u8]) -> Result<T, dec::Error<Infallible>>
+    pub fn from_slice<'a, T>(buf: &'a [u8]) -> Result<T, DecodeError<Infallible>>
     where
         T: serde::Deserialize<'a>,
     {
@@ -65,12 +66,12 @@ mod slice_reader {
 #[cfg(feature = "use_std")]
 mod io_buf_reader {
     use std::io::{ self, BufRead };
-    use crate::core::dec;
     use crate::core::utils::IoReader;
     use crate::serde::de;
+    use crate::serde::error::DecodeError;
 
     /// Decodes a value from a reader.
-    pub fn from_reader<T, R>(reader: R) -> Result<T, dec::Error<io::Error>>
+    pub fn from_reader<T, R>(reader: R) -> Result<T, DecodeError<io::Error>>
     where
         T: serde::de::DeserializeOwned,
         R: BufRead

@@ -1,8 +1,9 @@
 use crate::alloc::borrow::Cow;
 use serde::de::{ self, Visitor };
-use crate::core::{ major, marker, types };
+use crate::core::{ major, marker, types, error };
 use crate::core::dec::{ self, Decode };
 use crate::util::ScopeGuard;
+use crate::serde::error::DecodeError;
 
 
 pub struct Deserializer<R> {
@@ -21,11 +22,11 @@ impl<R> Deserializer<R> {
 
 impl<'de, R: dec::Read<'de>> Deserializer<R> {
     #[inline]
-    fn try_step(&mut self) -> Result<ScopeGuard<'_, Self>, dec::Error<R::Error>> {
+    fn try_step(&mut self, name: error::StaticStr) -> Result<ScopeGuard<'_, Self>, dec::Error<R::Error>> {
         if self.reader.step_in() {
             Ok(ScopeGuard(self, |de| de.reader.step_out()))
         } else {
-            Err(dec::Error::DepthLimit)
+            Err(dec::Error::depth_overflow(name))
         }
     }
 }
@@ -48,16 +49,18 @@ macro_rules! deserialize_type {
 }
 
 impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializer<R> {
-    type Error = dec::Error<R::Error>;
+    type Error = DecodeError<R::Error>;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>
     {
-        let mut de = self.try_step()?;
+        let name = &"any";
+
+        let mut de = self.try_step(name)?;
         let de = &mut *de;
 
-        let byte = dec::peek_one(&mut de.reader)?;
+        let byte = dec::peek_one(name, &mut de.reader)?;
         match dec::if_major(byte) {
             major::UNSIGNED => de.deserialize_u64(visitor),
             major::NEGATIVE => de.deserialize_i64(visitor),
@@ -70,7 +73,7 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
             major::TAG => match byte {
                 0xc2 => de.deserialize_u128(visitor),
                 0xc3 => de.deserialize_i128(visitor),
-                _ => Err(dec::Error::Unsupported { byte })
+                _ => Err(dec::Error::unsupported(name, byte).into())
             },
             major::SIMPLE => match byte {
                 marker::FALSE => {
@@ -93,9 +96,9 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
                 },
                 marker::F32 => de.deserialize_f32(visitor),
                 marker::F64 => de.deserialize_f64(visitor),
-                _ => Err(dec::Error::Unsupported { byte })
+                _ => Err(dec::Error::unsupported(name, byte).into())
             },
-            _ => Err(dec::Error::Unsupported { byte })
+            _ => Err(dec::Error::unsupported(name, byte).into())
         }
     }
 
@@ -166,9 +169,11 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let byte = dec::peek_one(&mut self.reader)?;
+        let name = &"option";
+
+        let byte = dec::peek_one(name, &mut self.reader)?;
         if byte != marker::NULL && byte != marker::UNDEFINED {
-            let mut de = self.try_step()?;
+            let mut de = self.try_step(name)?;
             visitor.visit_some(&mut *de)
         } else {
             self.reader.advance(1);
@@ -180,15 +185,14 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let byte = dec::pull_one(&mut self.reader)?;
+        let name = &"unit";
+
+        let byte = dec::pull_one(name, &mut self.reader)?;
         // 0 length array
         if byte == (major::ARRAY << 5) {
             visitor.visit_unit()
         } else {
-            Err(dec::Error::TypeMismatch {
-                name: "unit",
-                byte
-            })
+            Err(dec::Error::mismatch(name, byte).into())
         }
     }
 
@@ -212,8 +216,9 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        let mut de = self.try_step()?;
-        let seq = Accessor::array(&mut de)?;
+        let name = &"seq";
+        let mut de = self.try_step(name)?;
+        let seq = Accessor::array(name, &mut de)?;
         visitor.visit_seq(seq)
     }
 
@@ -226,8 +231,9 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where
         V: Visitor<'de>
     {
-        let mut de = self.try_step()?;
-        let seq = Accessor::tuple(&mut de, len)?;
+        let name = &"tuple";
+        let mut de = self.try_step(name)?;
+        let seq = Accessor::tuple(name, &mut de, len)?;
         visitor.visit_seq(seq)
     }
 
@@ -249,8 +255,9 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where
         V: Visitor<'de>
     {
-        let mut de = self.try_step()?;
-        let map = Accessor::map(&mut de)?;
+        let name = &"map";
+        let mut de = self.try_step(name)?;
+        let map = Accessor::map(name, &mut de)?;
         visitor.visit_map(map)
     }
 
@@ -276,8 +283,9 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
     where
         V: Visitor<'de>
     {
-        let mut de = self.try_step()?;
-        let accessor = EnumAccessor::enum_(&mut de)?;
+        let name = &"enum";
+        let mut de = self.try_step(name)?;
+        let accessor = EnumAccessor::enum_(name, &mut de)?;
         visitor.visit_enum(accessor)
     }
 
@@ -311,7 +319,7 @@ struct Accessor<'a, R> {
 
 impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
     #[inline]
-    pub fn array(de: &'a mut Deserializer<R>)
+    pub fn array(_name: error::StaticStr, de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
         let array_start = dec::ArrayStart::decode(&mut de.reader)?;
@@ -322,7 +330,7 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
     }
 
     #[inline]
-    pub fn tuple(de: &'a mut Deserializer<R>, len: usize)
+    pub fn tuple(name: error::StaticStr, de: &'a mut Deserializer<R>, len: usize)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
         let array_start = dec::ArrayStart::decode(&mut de.reader)?;
@@ -333,16 +341,12 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
                 len: array_start.0,
             })
         } else {
-            Err(dec::Error::RequireLength {
-                name: "tuple",
-                expect: len,
-                value: array_start.0.unwrap_or(0),
-            })
+            Err(dec::Error::require_length(name, array_start.0))
         }
     }
 
     #[inline]
-    pub fn map(de: &'a mut Deserializer<R>)
+    pub fn map(_name: error::StaticStr, de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
         let map_start = dec::MapStart::decode(&mut de.reader)?;
@@ -357,7 +361,7 @@ impl<'de, 'a, R> de::SeqAccess<'de> for Accessor<'a, R>
 where
     R: dec::Read<'de>
 {
-    type Error = dec::Error<R::Error>;
+    type Error = DecodeError<R::Error>;
 
     #[inline]
     fn next_element_seed<T>(&mut self, seed: T)
@@ -371,7 +375,7 @@ where
             } else {
                 Ok(None)
             }
-        } else if dec::peek_one(&mut self.de.reader)? != marker::BREAK {
+        } else if dec::peek_one(&"break", &mut self.de.reader)? != marker::BREAK {
             Ok(Some(seed.deserialize(&mut *self.de)?))
         } else {
             self.de.reader.advance(1);
@@ -386,7 +390,7 @@ where
 }
 
 impl<'de, 'a, R: dec::Read<'de>> de::MapAccess<'de> for Accessor<'a, R> {
-    type Error = dec::Error<R::Error>;
+    type Error = DecodeError<R::Error>;
 
     #[inline]
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
@@ -399,7 +403,7 @@ impl<'de, 'a, R: dec::Read<'de>> de::MapAccess<'de> for Accessor<'a, R> {
             } else {
                 Ok(None)
             }
-        } else if dec::peek_one(&mut self.de.reader)? != marker::BREAK {
+        } else if dec::peek_one(&"break", &mut self.de.reader)? != marker::BREAK {
             Ok(Some(seed.deserialize(&mut *self.de)?))
         } else {
             self.de.reader.advance(1);
@@ -426,10 +430,10 @@ struct EnumAccessor<'a, R> {
 
 impl<'de, 'a, R: dec::Read<'de>> EnumAccessor<'a, R> {
     #[inline]
-    pub fn enum_(de: &'a mut Deserializer<R>)
+    pub fn enum_(name: error::StaticStr, de: &'a mut Deserializer<R>)
         -> Result<EnumAccessor<'a, R>, dec::Error<R::Error>>
     {
-        let byte = dec::peek_one(&mut de.reader)?;
+        let byte = dec::peek_one(name, &mut de.reader)?;
         match dec::if_major(byte) {
             // string
             major::STRING => Ok(EnumAccessor { de }),
@@ -438,10 +442,7 @@ impl<'de, 'a, R: dec::Read<'de>> EnumAccessor<'a, R> {
                 de.reader.advance(1);
                 Ok(EnumAccessor { de })
             },
-            _ => Err(dec::Error::TypeMismatch {
-                name: "enum",
-                byte
-            })
+            _ => Err(dec::Error::mismatch(name, byte))
         }
     }
 }
@@ -450,7 +451,7 @@ impl<'de, 'a, R> de::EnumAccess<'de> for EnumAccessor<'a, R>
 where
     R: dec::Read<'de>
 {
-    type Error = dec::Error<R::Error>;
+    type Error = DecodeError<R::Error>;
     type Variant = EnumAccessor<'a, R>;
 
     #[inline]
@@ -467,7 +468,7 @@ impl<'de, 'a, R> de::VariantAccess<'de> for EnumAccessor<'a, R>
 where
     R: dec::Read<'de>
 {
-    type Error = dec::Error<R::Error>;
+    type Error = DecodeError<R::Error>;
 
     #[inline]
     fn unit_variant(self) -> Result<(), Self::Error> {
