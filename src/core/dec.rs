@@ -103,8 +103,7 @@ impl<'a, 'de, T: Read<'de>> Read<'de> for &'a mut T {
 
 #[inline]
 pub(crate) fn peek_one<'a, R: Read<'a>>(name: error::StaticStr, reader: &mut R) -> Result<u8, Error<R::Error>> {
-    let b = reader.fill(1)
-        .map_err(Error::read)?
+    let b = reader.fill(1)?
         .as_ref()
         .get(0)
         .copied()
@@ -125,7 +124,7 @@ fn pull_exact<'a, R: Read<'a>>(name: error::StaticStr, reader: &mut R, mut buf: 
 {
     let buf_len = buf.len();
     while !buf.is_empty() {
-        let readbuf = reader.fill(buf.len()).map_err(Error::read)?;
+        let readbuf = reader.fill(buf.len())?;
         let readbuf = readbuf.as_ref();
 
         if readbuf.is_empty() {
@@ -410,7 +409,7 @@ fn decode_bytes<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut
     let len = usize::try_from(len)
         .map_err(|_| Error::cast_overflow(name))?;
 
-    match reader.fill(len).map_err(Error::read)? {
+    match reader.fill(len)? {
         Reference::Long(buf) if buf.len() >= len => {
             reader.advance(len);
             Ok(&buf[..len])
@@ -429,7 +428,7 @@ fn decode_buf<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R
 
     if let Some(len) = decode_len(name, major, reader)? {
         // try long lifetime buffer
-        if let Reference::Long(buf) = reader.fill(len).map_err(Error::read)? {
+        if let Reference::Long(buf) = reader.fill(len)? {
             if buf.len() >= len {
                 reader.advance(len);
                 return Ok(Some(&buf[..len]));
@@ -442,7 +441,7 @@ fn decode_buf<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R
         let mut len = len;
 
         while len != 0 {
-            let readbuf = reader.fill(len).map_err(Error::read)?;
+            let readbuf = reader.fill(len)?;
             let readbuf = readbuf.as_ref();
 
             if readbuf.is_empty() {
@@ -827,13 +826,13 @@ impl<'a> Decode<'a> for IgnoredAny {
                     0x1b => 8,
                     _ => return Err(Error::mismatch(name, byte))
                 };
-                skip_exact(reader, skip + 1).map_err(Error::read)?;
+                skip_exact(reader, skip + 1)?;
             },
             major @ major::BYTES | major @ major::STRING |
             major @ major::ARRAY | major @ major::MAP => {
                 if let Some(len) = decode_len(name, major, reader)? {
                     match major {
-                        major::BYTES | major::STRING => skip_exact(reader, len).map_err(Error::read)?,
+                        major::BYTES | major::STRING => skip_exact(reader, len)?,
                         major::ARRAY | major::MAP => for _ in 0..len {
                             let _ignore = IgnoredAny::decode(reader)?;
 
@@ -868,7 +867,7 @@ impl<'a> Decode<'a> for IgnoredAny {
                     marker::F64 => 8,
                     _ => return Err(Error::unsupported(name, byte))
                 };
-                skip_exact(reader, skip + 1).map_err(Error::read)?;
+                skip_exact(reader, skip + 1)?;
             },
             _ => return Err(Error::unsupported(name, byte))
         }
