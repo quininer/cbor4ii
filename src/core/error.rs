@@ -24,6 +24,7 @@ pub enum ArithmeticOverflow {
     Underflow
 }
 
+/// Decode Error
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum DecodeError<E> {
@@ -76,12 +77,14 @@ impl Len {
     }
 }
 
-impl<E> DecodeError<E> {
+impl<E> From<E> for DecodeError<E> {
     #[cold]
-    pub(crate) fn read(err: E) -> DecodeError<E> {
+    fn from(err: E) -> DecodeError<E> {
         DecodeError::Read(err)
     }
+}
 
+impl<E> DecodeError<E> {
     #[cold]
     pub(crate) fn mismatch(name: StaticStr, found: u8) -> DecodeError<E> {
         DecodeError::Mismatch { name, found }
@@ -151,4 +154,45 @@ impl<E: std::error::Error + 'static> std::error::Error for DecodeError<E> {
             _ => None
         }
     }
+}
+
+/// Encode Error
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum EncodeError<E> {
+    Write(E)
+}
+
+impl<E> From<E> for EncodeError<E> {
+    #[cold]
+    fn from(err: E) -> EncodeError<E> {
+        EncodeError::Write(err)
+    }
+}
+
+impl<E: fmt::Debug> fmt::Display for EncodeError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+#[cfg(feature = "use_std")]
+impl<E: std::error::Error + 'static> std::error::Error for EncodeError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            EncodeError::Write(err) => Some(err),
+        }
+    }
+}
+
+#[test]
+fn test_error_type_size() {
+    // bottom type
+    assert_eq!(core::mem::size_of::<DecodeError<core::convert::Infallible>>(), 16);
+
+    // unit type
+    assert_eq!(core::mem::size_of::<DecodeError<()>>(), 16);
+
+    // a word type
+    assert_eq!(core::mem::size_of::<DecodeError<&'static ()>>(), 16);
 }

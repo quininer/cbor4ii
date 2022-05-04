@@ -8,13 +8,13 @@ mod ser;
 mod io_writer {
     use std::io;
     use serde::Serialize;
-    use crate::core::enc;
     use crate::core::utils::IoWriter;
+    use crate::serde::error::EncodeError;
     use crate::serde::ser;
 
     /// Serializes a value to a writer.
     pub fn to_writer<W, T>(writer: &mut W, value: &T)
-        -> Result<(), enc::Error<io::Error>>
+        -> Result<(), EncodeError<io::Error>>
     where
         W: io::Write,
         T: Serialize
@@ -30,13 +30,13 @@ mod buf_writer {
     use crate::alloc::vec::Vec;
     use crate::alloc::collections::TryReserveError;
     use serde::Serialize;
-    use crate::core::enc;
     use crate::core::utils::BufWriter;
+    use crate::serde::error::EncodeError;
     use crate::serde::ser;
 
     /// Serializes a value to a writer.
     pub fn to_vec<T>(buf: Vec<u8>, value: &T)
-        -> Result<Vec<u8>, enc::Error<TryReserveError>>
+        -> Result<Vec<u8>, EncodeError<TryReserveError>>
     where T: Serialize
     {
         let writer = BufWriter::new(buf);
@@ -86,6 +86,8 @@ mod io_buf_reader {
 #[cfg(feature = "use_alloc")] pub use buf_writer::to_vec;
 #[cfg(feature = "use_std")] pub use io_buf_reader::from_reader;
 pub use slice_reader::from_slice;
+
+pub use error::{ EncodeError, DecodeError };
 
 pub use ser::Serializer;
 
