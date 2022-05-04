@@ -137,23 +137,18 @@ impl<E> DecodeError<E> {
     }
 }
 
-#[cfg(feature = "use_std")]
-impl<E: std::error::Error + 'static> std::error::Error for DecodeError<E> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            #[cfg(feature = "serde1")]
-            DecodeError::Msg(_) => None,
-            DecodeError::Read(err) => Some(err),
-            _ => None
-        }
+impl<E: fmt::Debug> fmt::Display for DecodeError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
     }
 }
 
 #[cfg(feature = "use_std")]
-impl<E: fmt::Debug> std::error::Error for DecodeError<E> {}
-
-impl<E: fmt::Debug> fmt::Display for DecodeError<E> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+impl<E: std::error::Error + 'static> std::error::Error for DecodeError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            DecodeError::Read(err) => Some(err),
+            _ => None
+        }
     }
 }
