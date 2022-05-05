@@ -605,19 +605,18 @@ fn decode_len<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R
     }
 }
 
-pub struct ArrayStart(pub Option<usize>);
-
-impl<'a> Decode<'a> for ArrayStart {
+impl<'a> types::Array<()> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        decode_len(&"array", major::ARRAY, reader).map(ArrayStart)
+    pub fn len<R: Read<'a>>(reader: &mut R) -> Result<Option<usize>, Error<R::Error>> {
+        let name = &"array";
+        decode_len(name, major::ARRAY, reader)
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
+impl<'a, T: Decode<'a>> types::Array<Vec<T>> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn values<R: Read<'a>>(maybe_len: Option<usize>, reader: &mut R) -> Result<Vec<T>, Error<R::Error>> {
         let name = &"array";
         let mut arr = Vec::new();
 
@@ -627,7 +626,7 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());
         let reader = &mut *reader;
 
-        if let Some(len) = decode_len(name, major::ARRAY, reader)? {
+        if let Some(len) = maybe_len {
             arr.reserve(core::cmp::min(len, 256)); // TODO try_reserve ?
 
             for _ in 0..len {
@@ -645,19 +644,27 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
     }
 }
 
-pub struct MapStart(pub Option<usize>);
-
-impl<'a> Decode<'a> for MapStart {
+#[cfg(feature = "use_alloc")]
+impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
     #[inline]
     fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        decode_len(&"map", major::MAP, reader).map(MapStart)
+        let len = types::Array::len(reader)?;
+        types::Array::values(len, reader)
+    }
+}
+
+impl<'a> types::Map<()> {
+    #[inline]
+    pub fn len<R: Read<'a>>(reader: &mut R) -> Result<Option<usize>, Error<R::Error>> {
+        let name = &"map";
+        decode_len(name, major::MAP, reader)
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
+impl<'a, K: Decode<'a>, V: Decode<'a>> types::Map<Vec<(K, V)>> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    pub fn values<R: Read<'a>>(maybe_len: Option<usize>, reader: &mut R) -> Result<Vec<(K, V)>, Error<R::Error>> {
         let name = &"map";
         let mut map = Vec::new();
 
@@ -667,7 +674,7 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());
         let reader = &mut *reader;
 
-        if let Some(len) = decode_len(name, major::MAP, reader)? {
+        if let Some(len) = maybe_len {
             map.reserve(core::cmp::min(len, 256)); // TODO try_reserve ?
 
             for _ in 0..len {
@@ -683,27 +690,42 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
             }
         }
 
+        Ok(map)
+    }
+}
+
+#[cfg(feature = "use_alloc")]
+impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
+    #[inline]
+    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let len = types::Map::len(reader)?;
+        let map = types::Map::values(len, reader)?;
         Ok(types::Map(map))
     }
 }
 
-pub struct TagStart(pub u64);
-
-impl<'a> Decode<'a> for TagStart {
+impl<'a> types::Tag<()> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        TypeNum::new(&"tag", major::TAG).decode_u64(reader).map(TagStart)
+    pub fn tag<R: Read<'a>>(reader: &mut R) -> Result<u64, Error<R::Error>> {
+        TypeNum::new(&"tag", major::TAG).decode_u64(reader)
+    }
+}
+impl<'a, T: Decode<'a>> types::Tag<T> {
+    #[inline]
+    pub fn value<R: Read<'a>>(reader: &mut R) -> Result<T, Error<R::Error>> {
+       T::decode(reader)
     }
 }
 
 impl<'a, T: Decode<'a>> Decode<'a> for types::Tag<T> {
     #[inline]
     fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let tag = TypeNum::new(&"tag", major::TAG).decode_u64(reader)?;
-        let value = T::decode(reader)?;
+        let tag = types::Tag::tag(reader)?;
+        let value = types::Tag::value(reader)?;
         Ok(types::Tag(tag, value))
     }
 }
+
 
 impl<'a> Decode<'a> for types::Simple {
     #[inline]
