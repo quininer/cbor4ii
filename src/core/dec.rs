@@ -62,17 +62,26 @@ pub enum Reference<'de, 'short> {
 }
 
 /// Decode trait
-pub trait Decode<'a>: Sized {
+pub trait Decode<'de>: Sized {
     /// Decode to type
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>>;
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>>;
 }
 
-impl Reference<'_, '_> {
+impl<'de, 'short> Reference<'de, 'short> {
     #[inline]
     pub const fn as_ref(&self) -> &[u8] {
         match self {
             Reference::Long(buf) => buf,
             Reference::Short(buf) => buf
+        }
+    }
+
+    #[inline]
+    pub fn take(&self, len: usize) -> Reference<'de, 'short> {
+        let len = core::cmp::min(self.as_ref().len(), len);
+        match self {
+            Reference::Long(buf) => Reference::Long(&buf[..len]),
+            Reference::Short(buf) => Reference::Short(&buf[..len])
         }
     }
 }
@@ -102,7 +111,9 @@ impl<'a, 'de, T: Read<'de>> Read<'de> for &'a mut T {
 }
 
 #[inline]
-pub(crate) fn peek_one<'a, R: Read<'a>>(name: error::StaticStr, reader: &mut R) -> Result<u8, Error<R::Error>> {
+pub(crate) fn peek_one<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R)
+    -> Result<u8, Error<R::Error>>
+{
     let b = reader.fill(1)?
         .as_ref()
         .get(0)
@@ -112,14 +123,16 @@ pub(crate) fn peek_one<'a, R: Read<'a>>(name: error::StaticStr, reader: &mut R) 
 }
 
 #[inline]
-pub(crate) fn pull_one<'a, R: Read<'a>>(name: error::StaticStr, reader: &mut R) -> Result<u8, Error<R::Error>> {
+pub(crate) fn pull_one<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R)
+    -> Result<u8, Error<R::Error>>
+{
     let b = peek_one(name, reader)?;
     reader.advance(1);
     Ok(b)
 }
 
 #[inline]
-fn pull_exact<'a, R: Read<'a>>(name: error::StaticStr, reader: &mut R, mut buf: &mut [u8])
+fn pull_exact<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R, mut buf: &mut [u8])
     -> Result<(), Error<R::Error>>
 {
     let buf_len = buf.len();
@@ -166,7 +179,7 @@ impl TypeNum {
     }
 
     #[inline]
-    pub fn decode_u8<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u8, Error<R::Error>> {
+    pub fn decode_u8<'de, R: Read<'de>>(self, reader: &mut R) -> Result<u8, Error<R::Error>> {
         let byte = pull_one(self.name, reader)?;
         match byte & self.major_limit {
             x @ 0 ..= 0x17 => Ok(x),
@@ -176,7 +189,7 @@ impl TypeNum {
     }
 
     #[inline]
-    fn decode_u16<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u16, Error<R::Error>> {
+    fn decode_u16<'de, R: Read<'de>>(self, reader: &mut R) -> Result<u16, Error<R::Error>> {
         let byte = pull_one(self.name, reader)?;
         match byte & self.major_limit {
             x @ 0 ..= 0x17 => Ok(x.into()),
@@ -191,7 +204,7 @@ impl TypeNum {
     }
 
     #[inline]
-    fn decode_u32<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u32, Error<R::Error>> {
+    fn decode_u32<'de, R: Read<'de>>(self, reader: &mut R) -> Result<u32, Error<R::Error>> {
         let byte = pull_one(self.name, reader)?;
         match byte & self.major_limit {
             x @ 0 ..= 0x17 => Ok(x.into()),
@@ -211,7 +224,7 @@ impl TypeNum {
     }
 
     #[inline]
-    pub(crate) fn decode_u64<'a, R: Read<'a>>(self, reader: &mut R) -> Result<u64, Error<R::Error>> {
+    pub(crate) fn decode_u64<'de, R: Read<'de>>(self, reader: &mut R) -> Result<u64, Error<R::Error>> {
         let byte = pull_one(self.name, reader)?;
         match byte & self.major_limit {
             x @ 0 ..= 0x17 => Ok(x.into()),
@@ -239,9 +252,9 @@ impl TypeNum {
 macro_rules! decode_ux {
     ( $( $t:ty , $decode_fn:ident );* $( ; )? ) => {
         $(
-            impl<'a> Decode<'a> for $t {
+            impl<'de> Decode<'de> for $t {
                 #[inline]
-                fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+                fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
                     TypeNum::new(&stringify!($t), major::UNSIGNED).$decode_fn(reader)
                 }
             }
@@ -252,9 +265,9 @@ macro_rules! decode_ux {
 macro_rules! decode_nx {
     ( $( $t:ty , $decode_fn:ident );* $( ; )? ) => {
         $(
-            impl<'a> Decode<'a> for types::Negative<$t> {
+            impl<'de> Decode<'de> for types::Negative<$t> {
                 #[inline]
-                fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+                fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
                     TypeNum::new(&concat!("-", stringify!($t)), major::NEGATIVE)
                         .$decode_fn(reader)
                         .map(types::Negative)
@@ -268,9 +281,9 @@ macro_rules! decode_nx {
 macro_rules! decode_ix {
     ( $( $t:ty , $decode_fn:ident );* $( ; )? ) => {
         $(
-            impl<'a> Decode<'a> for $t {
+            impl<'de> Decode<'de> for $t {
                 #[inline]
-                fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+                fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
                     let name = &stringify!($t);
                     let unsigned_name = &concat!("+", stringify!($t));
                     let negative_name = &concat!("-", stringify!($t));
@@ -321,7 +334,7 @@ decode_ix! {
 }
 
 #[inline]
-fn decode_x128<'a, R: Read<'a>>(name: error::StaticStr, reader: &mut R) -> Result<[u8; 16], Error<R::Error>> {
+fn decode_x128<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R) -> Result<[u8; 16], Error<R::Error>> {
     let len = decode_len(name, major::BYTES, reader)?;
     let len = len.ok_or_else(|| Error::require_length(name, None))?;
 
@@ -334,9 +347,9 @@ fn decode_x128<'a, R: Read<'a>>(name: error::StaticStr, reader: &mut R) -> Resul
     }
 }
 
-impl<'a> Decode<'a> for u128 {
+impl<'de> Decode<'de> for u128 {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"u128";
         let name_bytes = &"u128::bytes";
         let name_tag = &"u128::tag";
@@ -356,9 +369,9 @@ impl<'a> Decode<'a> for u128 {
     }
 }
 
-impl<'a> Decode<'a> for i128 {
+impl<'de> Decode<'de> for i128 {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"i128";
         let name_ubytes = &"+i128::bytes";
         let name_nbytes = &"-i128::bytes";
@@ -402,8 +415,23 @@ impl<'a> Decode<'a> for i128 {
 }
 
 #[inline]
-fn decode_bytes<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R)
-    -> Result<&'a [u8], Error<R::Error>>
+fn decode_len<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &mut R)
+    -> Result<Option<usize>, Error<R::Error>>
+{
+    let byte = peek_one(name, reader)?;
+    if byte != (marker::START | (major << 5)) {
+        let len = TypeNum::new(name, major).decode_u64(reader)?;
+        let len = usize::try_from(len).map_err(|_| Error::cast_overflow(name))?;
+        Ok(Some(len))
+    } else {
+        reader.advance(1);
+        Ok(None)
+    }
+}
+
+#[inline]
+fn decode_bytes<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &mut R)
+    -> Result<&'de [u8], Error<R::Error>>
 {
     let len = TypeNum::new(name, major).decode_u64(reader)?;
     let len = usize::try_from(len)
@@ -419,43 +447,93 @@ fn decode_bytes<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut
     }
 }
 
-#[inline]
-#[cfg(feature = "use_alloc")]
-fn decode_buf<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R, buf: &mut Vec<u8>)
-    -> Result<Option<&'a [u8]>, Error<R::Error>>
-{
-    const CAP_LIMIT: usize = 16 * 1024;
+pub trait ChunkConsumer<'de> {
+    /// Tries to reserve capacity.
+    ///
+    /// Returning false will stop consumption.
+    fn try_reserve(&mut self, additional: usize) -> bool;
 
+    /// Push bytes references to consumer.
+    ///
+    /// Returning false will stop consumption.
+    fn push(&mut self, buf: Reference<'de, '_>) -> bool;
+}
+
+#[cfg(feature = "use_alloc")]
+#[derive(Default)]
+struct VecConsumer<'de> {
+    vec: Vec<u8>,
+    bad_reserve: usize,
+    _phantom: core::marker::PhantomData<&'de ()>
+}
+
+#[cfg(feature = "use_alloc")]
+impl<'de> ChunkConsumer<'de> for VecConsumer<'de> {
+    #[inline]
+    fn try_reserve(&mut self, additional: usize) -> bool {
+        const CAP_LIMIT: usize = 16 * 1024;
+
+        let len = core::cmp::min(CAP_LIMIT, additional);
+
+        if self.vec.try_reserve(len).is_ok() {
+            true
+        } else {
+            self.bad_reserve = additional;
+            false
+        }
+    }
+
+    #[inline]
+    fn push(&mut self, buf: Reference<'de, '_>) -> bool {
+        self.vec.extend_from_slice(buf.as_ref());
+        true
+    }
+}
+
+enum ChunkResult<'de> {
+    Long(&'de [u8]),
+    Consumed,
+    Stop
+}
+
+#[inline]
+fn decode_buf<'de, R, C>(name: error::StaticStr, major: u8, reader: &mut R, consumer: &mut C)
+    -> Result<ChunkResult<'de>, Error<R::Error>>
+where
+    R: Read<'de>,
+    C: ChunkConsumer<'de>
+{
     if let Some(len) = decode_len(name, major, reader)? {
         // try long lifetime buffer
         if let Reference::Long(buf) = reader.fill(len)? {
             if buf.len() >= len {
-                reader.advance(len);
-                return Ok(Some(&buf[..len]));
+                return Ok(ChunkResult::Long(&buf[..len]));
             }
         }
 
-        buf.reserve(core::cmp::min(len, CAP_LIMIT)); // TODO try_reserve ?
+        if !consumer.try_reserve(len) {
+            return Ok(ChunkResult::Stop)
+        }
 
         let expect_len = len;
         let mut len = len;
 
         while len != 0 {
             let readbuf = reader.fill(len)?;
-            let readbuf = readbuf.as_ref();
 
-            if readbuf.is_empty() {
+            if readbuf.as_ref().is_empty() {
                 return Err(Error::eof(name, expect_len));
             }
 
-            let readlen = core::cmp::min(readbuf.len(), len);
+            let readbuf = readbuf.take(len);
+            let n = readbuf.as_ref().len();
 
-            buf.extend_from_slice(&readbuf[..readlen]);
-            reader.advance(readlen);
-            len -= readlen;
+            if !consumer.push(readbuf) {
+               return Ok(ChunkResult::Stop)
+            }
+            reader.advance(n);
+            len -= n;
         }
-
-        Ok(None)
     } else {
         // bytes sequence
         while !is_break(reader)? {
@@ -465,54 +543,87 @@ fn decode_buf<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R
             let mut reader = ScopeGuard(reader, |reader| reader.step_out());
             let reader = &mut *reader;
 
-            if let Some(longbuf) = decode_buf(name, major, reader, buf)? {
-                buf.extend_from_slice(longbuf);
+            match decode_buf(name, major, reader, consumer)? {
+                ChunkResult::Long(longbuf) => if consumer.push(Reference::Long(longbuf)) {
+                    reader.advance(longbuf.len());
+                } else {
+                    return Ok(ChunkResult::Stop)
+                },
+                ChunkResult::Consumed => (),
+                ChunkResult::Stop => return Ok(ChunkResult::Stop),
             }
         }
+    }
 
-        Ok(None)
+    Ok(ChunkResult::Consumed)
+}
+
+impl<'de> types::Bytes<()> {
+    /// Decode the bytes into the consumer.
+    ///
+    /// and when false is returned, the consumer has issued a Stop.
+    #[inline]
+    pub fn decode_to<R, C>(reader: &mut R, consumer: &mut C)
+        -> Result<bool, Error<R::Error>>
+    where
+        R: Read<'de>,
+        C: ChunkConsumer<'de>
+    {
+        match decode_buf(&"bytes", major::BYTES, reader, consumer)? {
+            ChunkResult::Long(longbuf) => if consumer.push(Reference::Long(longbuf)) {
+                reader.advance(longbuf.len());
+                Ok(true)
+            } else {
+                Ok(false)
+            },
+            ChunkResult::Consumed => Ok(true),
+            ChunkResult::Stop => Ok(false),
+        }
     }
 }
 
-impl<'a> Decode<'a> for types::Bytes<&'a [u8]> {
+impl<'de> Decode<'de> for types::Bytes<&'de [u8]> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let buf = decode_bytes(&"bytes", major::BYTES, reader)?;
         Ok(types::Bytes(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for types::Bytes<Vec<u8>> {
+impl<'de> Decode<'de> for types::Bytes<Vec<u8>> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let mut buf = Vec::new();
-        if let Some(longbuf) = decode_buf(&"bytes", major::BYTES, reader, &mut buf)? {
-            buf.extend_from_slice(longbuf);
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let mut vec = VecConsumer::default();
+        if <types::Bytes<()>>::decode_to(reader, &mut vec)? {
+            Ok(types::Bytes(vec.vec))
+        } else {
+            Err(Error::length_overflow(&"bytes", vec.bad_reserve))
         }
-        Ok(types::Bytes(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for types::Bytes<crate::alloc::borrow::Cow<'a, [u8]>> {
+impl<'de> Decode<'de> for types::Bytes<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         use crate::alloc::borrow::Cow;
 
-        let mut buf = Vec::new();
-        Ok(types::Bytes(if let Some(longbuf) = decode_buf(&"bytes", major::BYTES, reader, &mut buf)? {
-            Cow::Borrowed(longbuf)
-        } else {
-            Cow::Owned(buf)
-        }))
+        let mut vec = VecConsumer::default();
+        match decode_buf(&"bytes", major::BYTES, reader, &mut vec)? {
+            ChunkResult::Long(longbuf) => {
+                reader.advance(longbuf.len());
+                Ok(types::Bytes(Cow::Borrowed(longbuf)))
+            },
+            ChunkResult::Consumed => Ok(types::Bytes(Cow::Owned(vec.vec))),
+            ChunkResult::Stop => Err(Error::length_overflow(&"bytes", vec.bad_reserve)),
+        }
     }
 }
 
-
-impl<'a> Decode<'a> for &'a str {
+impl<'de> Decode<'de> for &'de str {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"str";
         let buf = decode_bytes(name, major::STRING, reader)?;
         core::str::from_utf8(buf).map_err(|_| Error::require_utf8(name))
@@ -520,104 +631,112 @@ impl<'a> Decode<'a> for &'a str {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for String {
+impl<'de> Decode<'de> for String {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let name = &"str";
-        let mut buf = Vec::new();
-        if let Some(longbuf) = decode_buf(name, major::STRING, reader, &mut buf)? {
-            buf.extend_from_slice(longbuf);
-        }
-        let buf = String::from_utf8(buf)
-            .map_err(|_| Error::require_utf8(name))?;
-        Ok(buf)
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let types::BadStr(buf) = <types::BadStr<Vec<u8>>>::decode(reader)?;
+        String::from_utf8(buf).map_err(|_| Error::require_utf8(&"str"))
     }
 }
 
-
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for crate::alloc::borrow::Cow<'a, str> {
+impl<'de> Decode<'de> for crate::alloc::borrow::Cow<'de, str> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         use crate::alloc::borrow::Cow;
 
         let name = &"str";
-        let mut buf = Vec::new();
-        Ok(if let Some(longbuf) = decode_buf(name, major::STRING, reader, &mut buf)? {
-            let buf = core::str::from_utf8(longbuf)
-                .map_err(|_| Error::require_utf8(name))?;
-            Cow::Borrowed(buf)
-        } else {
-            let buf = String::from_utf8(buf)
-                .map_err(|_| Error::require_utf8(name))?;
-            Cow::Owned(buf)
-        })
+        let types::BadStr(buf) = <types::BadStr<Cow<'_, [u8]>>>::decode(reader)?;
+
+        match buf {
+            Cow::Borrowed(buf) => core::str::from_utf8(buf)
+                .map(Cow::Borrowed)
+                .map_err(|_| Error::require_utf8(name)),
+            Cow::Owned(buf) => String::from_utf8(buf)
+                .map(Cow::Owned)
+                .map_err(|_| Error::require_utf8(name))
+        }
     }
 }
 
-impl<'a> Decode<'a> for types::BadStr<&'a [u8]> {
+impl<'de> types::BadStr<()> {
+    /// Decode the string bytes into the consumer.
+    ///
+    /// and when false is returned, the consumer has issued a Stop.
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    pub fn decode_to<R, C>(reader: &mut R, consumer: &mut C)
+        -> Result<bool, Error<R::Error>>
+    where
+        R: Read<'de>,
+        C: ChunkConsumer<'de>
+    {
+        match decode_buf(&"str", major::STRING, reader, consumer)? {
+            ChunkResult::Long(longbuf) => if consumer.push(Reference::Long(longbuf)) {
+                reader.advance(longbuf.len());
+                Ok(true)
+            } else {
+                Ok(false)
+            },
+            ChunkResult::Consumed => Ok(true),
+            ChunkResult::Stop => Ok(false),
+        }
+    }
+}
+
+impl<'de> Decode<'de> for types::BadStr<&'de [u8]> {
+    #[inline]
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let buf = decode_bytes(&"str", major::STRING, reader)?;
         Ok(types::BadStr(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for types::BadStr<Vec<u8>> {
+impl<'de> Decode<'de> for types::BadStr<Vec<u8>> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let mut buf = Vec::new();
-        if let Some(longbuf) = decode_buf(&"str", major::STRING, reader, &mut buf)? {
-            buf.extend_from_slice(longbuf);
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let name = &"str";
+        let mut vec = VecConsumer::default();
+
+        if <types::BadStr<()>>::decode_to(reader, &mut vec)? {
+            Ok(types::BadStr(vec.vec))
+        } else {
+            Err(Error::length_overflow(name, vec.bad_reserve))
         }
-        Ok(types::BadStr(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a> Decode<'a> for types::BadStr<crate::alloc::borrow::Cow<'a, [u8]>> {
+impl<'de> Decode<'de> for types::BadStr<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         use crate::alloc::borrow::Cow;
 
-        let mut buf = Vec::new();
-        Ok(types::BadStr(if let Some(longbuf) = decode_buf(&"str", major::STRING, reader, &mut buf)? {
-            Cow::Borrowed(longbuf)
-        } else {
-            Cow::Owned(buf)
-        }))
-    }
-}
-
-#[inline]
-fn decode_len<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R)
-    -> Result<Option<usize>, Error<R::Error>>
-{
-    let byte = peek_one(name, reader)?;
-    if byte != (marker::START | (major << 5)) {
-        let len = TypeNum::new(name, major).decode_u64(reader)?;
-        let len = usize::try_from(len).map_err(|_| Error::cast_overflow(name))?;
-        Ok(Some(len))
-    } else {
-        reader.advance(1);
-        Ok(None)
+        let mut vec = VecConsumer::default();
+        match decode_buf(&"str", major::STRING, reader, &mut vec)? {
+            ChunkResult::Long(longbuf) => {
+                reader.advance(longbuf.len());
+                Ok(types::BadStr(Cow::Borrowed(longbuf)))
+            },
+            ChunkResult::Consumed => Ok(types::BadStr(Cow::Owned(vec.vec))),
+            ChunkResult::Stop => Err(Error::length_overflow(&"str", vec.bad_reserve)),
+        }
     }
 }
 
 pub struct ArrayStart(pub Option<usize>);
 
-impl<'a> Decode<'a> for ArrayStart {
+impl<'de> Decode<'de> for ArrayStart {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         decode_len(&"array", major::ARRAY, reader).map(ArrayStart)
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
+impl<'de, T: Decode<'de>> Decode<'de> for Vec<T> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"array";
         let mut arr = Vec::new();
 
@@ -647,17 +766,17 @@ impl<'a, T: Decode<'a>> Decode<'a> for Vec<T> {
 
 pub struct MapStart(pub Option<usize>);
 
-impl<'a> Decode<'a> for MapStart {
+impl<'de> Decode<'de> for MapStart {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         decode_len(&"map", major::MAP, reader).map(MapStart)
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
+impl<'de, K: Decode<'de>, V: Decode<'de>> Decode<'de> for types::Map<Vec<(K, V)>> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"map";
         let mut map = Vec::new();
 
@@ -689,33 +808,33 @@ impl<'a, K: Decode<'a>, V: Decode<'a>> Decode<'a> for types::Map<Vec<(K, V)>> {
 
 pub struct TagStart(pub u64);
 
-impl<'a> Decode<'a> for TagStart {
+impl<'de> Decode<'de> for TagStart {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         TypeNum::new(&"tag", major::TAG).decode_u64(reader).map(TagStart)
     }
 }
 
-impl<'a, T: Decode<'a>> Decode<'a> for types::Tag<T> {
+impl<'de, T: Decode<'de>> Decode<'de> for types::Tag<T> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let tag = TypeNum::new(&"tag", major::TAG).decode_u64(reader)?;
         let value = T::decode(reader)?;
         Ok(types::Tag(tag, value))
     }
 }
 
-impl<'a> Decode<'a> for types::Simple {
+impl<'de> Decode<'de> for types::Simple {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let n = TypeNum::new(&"simple", major::SIMPLE).decode_u8(reader)?;
         Ok(types::Simple(n))
     }
 }
 
-impl<'a> Decode<'a> for bool {
+impl<'de> Decode<'de> for bool {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"bool";
         let byte = peek_one(name, reader)?;
         let ret = match byte {
@@ -728,9 +847,9 @@ impl<'a> Decode<'a> for bool {
     }
 }
 
-impl<'a, T: Decode<'a>> Decode<'a> for Option<T> {
+impl<'de, T: Decode<'de>> Decode<'de> for Option<T> {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let byte = peek_one(&"option", reader)?;
         if byte != marker::NULL && byte != marker::UNDEFINED {
             T::decode(reader).map(Some)
@@ -741,9 +860,9 @@ impl<'a, T: Decode<'a>> Decode<'a> for Option<T> {
     }
 }
 
-impl<'a> Decode<'a> for types::F16 {
+impl<'de> Decode<'de> for types::F16 {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"f16";
         let byte = peek_one(name, reader)?;
 
@@ -759,17 +878,17 @@ impl<'a> Decode<'a> for types::F16 {
 }
 
 #[cfg(feature = "half-f16")]
-impl<'a> Decode<'a> for half::f16 {
+impl<'de> Decode<'de> for half::f16 {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let types::F16(n) = types::F16::decode(reader)?;
         Ok(half::f16::from_bits(n))
     }
 }
 
-impl<'a> Decode<'a> for f32 {
+impl<'de> Decode<'de> for f32 {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"f32";
         let byte = peek_one(name, reader)?;
 
@@ -784,9 +903,9 @@ impl<'a> Decode<'a> for f32 {
     }
 }
 
-impl<'a> Decode<'a> for f64 {
+impl<'de> Decode<'de> for f64 {
     #[inline]
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"f64";
         let byte = peek_one(name, reader)?;
 
@@ -804,8 +923,8 @@ impl<'a> Decode<'a> for f64 {
 /// Ignore an arbitrary object
 pub struct IgnoredAny;
 
-impl<'a> Decode<'a> for IgnoredAny {
-    fn decode<R: Read<'a>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+impl<'de> Decode<'de> for IgnoredAny {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"ignored-any";
 
         if !reader.step_in() {
@@ -877,7 +996,7 @@ impl<'a> Decode<'a> for IgnoredAny {
 }
 
 #[inline]
-pub fn is_break<'a, R: Read<'a>>(reader: &mut R) -> Result<bool, Error<R::Error>> {
+pub fn is_break<'de, R: Read<'de>>(reader: &mut R) -> Result<bool, Error<R::Error>> {
     if peek_one(&"break", reader)? == marker::BREAK {
         reader.advance(1);
         Ok(true)
