@@ -7,6 +7,9 @@ use core::convert::TryFrom;
 /// Use `&&str` instead of `&str` to reduce type size.
 pub type StaticStr = &'static &'static str;
 
+/// Never type
+pub type Never = core::convert::Infallible;
+
 /// Length type
 #[derive(Debug)]
 pub enum Len {
@@ -188,7 +191,7 @@ impl<E: std::error::Error + 'static> std::error::Error for EncodeError<E> {
 #[test]
 fn test_error_type_size() {
     // bottom type
-    assert_eq!(core::mem::size_of::<DecodeError<core::convert::Infallible>>(), 16);
+    assert_eq!(core::mem::size_of::<DecodeError<Never>>(), 16);
 
     // unit type
     assert_eq!(core::mem::size_of::<DecodeError<()>>(), 16);
