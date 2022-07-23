@@ -447,6 +447,121 @@ fn decode_bytes<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &m
     }
 }
 
+pub struct BytesSequence<'de, 'short, R>
+where
+    R: Read<'de>
+{
+    name: error::StaticStr,
+    major: u8,
+    reader: &'short mut R,
+    started: bool,
+    level: usize,
+    remaining: usize,
+    ready: usize,
+    _phantom: core::marker::PhantomData<&'de [u8]>
+}
+
+pub enum BytesDecodeEvent<'de, 'short> {
+    Reserve(usize),
+    Bytes(Reference<'de, 'short>),
+    End
+}
+
+impl<'de, 'short, R> BytesSequence<'de, 'short, R>
+where
+    R: Read<'de>
+{
+    pub fn next(&'short mut self) -> Result<BytesDecodeEvent<'de, 'short>, Error<R::Error>> {
+        if self.ready != 0 {
+            self.reader.advance(self.ready);
+            self.ready = 0;
+        }
+
+        loop {
+            match (self.level, self.remaining) {
+                (0, 0) if self.started => return Ok(BytesDecodeEvent::End),
+                (0, 0) => {
+                    self.started = true;
+
+                    match decode_len(self.name, self.major, self.reader)? {
+                        Some(len) => {
+                            self.remaining = len;
+                            return Ok(BytesDecodeEvent::Reserve(len));
+                        },
+                        None => {
+                            self.level = self.level.checked_add(1)
+                                .ok_or_else(|| Error::depth_overflow(self.name))?;
+                            continue
+                        }
+                    }
+                },
+                (level, 0) => {
+                    if is_break(self.reader)? {
+                        self.level = level - 1;
+                        continue
+                    }
+
+                    match decode_len(self.name, self.major, self.reader)? {
+                        Some(len) => {
+                            self.remaining = len;
+                            return Ok(BytesDecodeEvent::Reserve(len));
+                        },
+                        None => {
+                            self.level = self.level.checked_add(1)
+                                .ok_or_else(|| Error::depth_overflow(self.name))?;
+                            continue
+                        }
+                    }
+                },
+                (_, len) => {
+                    let buf = self.reader.fill(len)?;
+
+                    if buf.as_ref().is_empty() {
+                        return Err(Error::eof(self.name, len));
+                    }
+
+                    let buf = buf.take(len);
+                    let n = buf.as_ref().len();
+
+                    self.ready = n;
+                    self.remaining -= n;
+
+                    return Ok(BytesDecodeEvent::Bytes(buf));
+                },
+            }
+        }
+    }
+}
+
+impl<'de, 'short, R> Drop for BytesSequence<'de, 'short, R>
+where
+    R: Read<'de>
+{
+    fn drop(&mut self) {
+        if self.ready != 0 {
+            self.reader.advance(self.ready);
+        }
+    }
+}
+
+impl<'de, 'short, R> BytesSequence<'de, 'short, R>
+where
+    R: Read<'de>
+{
+    pub fn new(name: error::StaticStr, major: u8, reader: &'short mut R) -> Self {
+        BytesSequence {
+            name, major, reader,
+            started: false,
+            level: 0,
+            remaining: 0,
+            ready: 0,
+            _phantom: core::marker::PhantomData
+        }
+    }
+}
+
+
+
 pub trait ChunkConsumer<'de> {
     /// Tries to reserve capacity.
     ///
