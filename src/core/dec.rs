@@ -548,7 +548,7 @@ impl<'de, 'short, R> BytesSequence<'de, 'short, R>
 where
     R: Read<'de>
 {
-    pub fn new(name: error::StaticStr, major: u8, reader: &'short mut R) -> Self {
+    pub(crate) fn new(name: error::StaticStr, major: u8, reader: &'short mut R) -> Self {
         BytesSequence {
             name, major, reader,
             started: false,
@@ -560,117 +560,55 @@ where
     }
 }
 
-
-
-pub trait ChunkConsumer<'de> {
-    /// Tries to reserve capacity.
-    ///
-    /// Returning false will stop consumption.
-    fn try_reserve(&mut self, additional: usize) -> bool;
-
-    /// Push bytes references to consumer.
-    ///
-    /// Returning false will stop consumption.
-    fn push(&mut self, buf: Reference<'de, '_>) -> bool;
-}
-
 #[cfg(feature = "use_alloc")]
-#[derive(Default)]
-struct VecConsumer<'de> {
-    vec: Vec<u8>,
-    bad_reserve: usize,
-    _phantom: core::marker::PhantomData<&'de ()>
-}
-
-#[cfg(feature = "use_alloc")]
-impl<'de> ChunkConsumer<'de> for VecConsumer<'de> {
-    #[inline]
-    fn try_reserve(&mut self, additional: usize) -> bool {
-        const CAP_LIMIT: usize = 16 * 1024;
-
-        let len = core::cmp::min(CAP_LIMIT, additional);
-
-        if self.vec.try_reserve(len).is_ok() {
-            true
-        } else {
-            self.bad_reserve = additional;
-            false
-        }
-    }
-
-    #[inline]
-    fn push(&mut self, buf: Reference<'de, '_>) -> bool {
-        self.vec.extend_from_slice(buf.as_ref());
-        true
-    }
-}
-
-enum ChunkResult<'de> {
-    Long(&'de [u8]),
-    Consumed,
-    Stop
-}
-
 #[inline]
-fn decode_buf<'de, R, C>(name: error::StaticStr, major: u8, reader: &mut R, consumer: &mut C)
-    -> Result<ChunkResult<'de>, Error<R::Error>>
+fn decode_buf<'de, R>(name: error::StaticStr, major: u8, reader: &mut R)
+    -> Result<Vec<u8>, Error<R::Error>>
 where
     R: Read<'de>,
-    C: ChunkConsumer<'de>
 {
-    if let Some(len) = decode_len(name, major, reader)? {
-        // try long lifetime buffer
-        if let Reference::Long(buf) = reader.fill(len)? {
-            if buf.len() >= len {
-                return Ok(ChunkResult::Long(&buf[..len]));
-            }
-        }
-
-        if !consumer.try_reserve(len) {
-            return Ok(ChunkResult::Stop)
-        }
-
-        let expect_len = len;
-        let mut len = len;
-
-        while len != 0 {
-            let readbuf = reader.fill(len)?;
-
-            if readbuf.as_ref().is_empty() {
-                return Err(Error::eof(name, expect_len));
-            }
-
-            let readbuf = readbuf.take(len);
-            let n = readbuf.as_ref().len();
-
-            if !consumer.push(readbuf) {
-               return Ok(ChunkResult::Stop)
-            }
-            reader.advance(n);
-            len -= n;
-        }
-    } else {
-        // bytes sequence
-        while !is_break(reader)? {
-            if !reader.step_in() {
-                return Err(Error::depth_overflow(name));
-            }
-            let mut reader = ScopeGuard(reader, |reader| reader.step_out());
-            let reader = &mut *reader;
-
-            match decode_buf(name, major, reader, consumer)? {
-                ChunkResult::Long(longbuf) => if consumer.push(Reference::Long(longbuf)) {
-                    reader.advance(longbuf.len());
-                } else {
-                    return Ok(ChunkResult::Stop)
-                },
-                ChunkResult::Consumed => (),
-                ChunkResult::Stop => return Ok(ChunkResult::Stop),
-            }
+    let mut output = Vec::new();
+    let mut seq = BytesSequence::new(name, major, reader);
+    loop {
+        match seq.next()? {
+            BytesDecodeEvent::Reserve(n) => output.try_reserve(n)
+                .map_err(|_| Error::length_overflow(name, n))?,
+            BytesDecodeEvent::Bytes(buf) => output.extend_from_slice(buf.as_ref()),
+            BytesDecodeEvent::End => break
         }
     }
+    Ok(types::Bytes(output))
+}
 
-    Ok(ChunkResult::Consumed)
+#[cfg(feature = "use_alloc")]
+#[inline]
+fn decode_cow_buf<'de, R>(name: error::StaticStr, major: u8, reader: &mut R)
+    -> Result<crate::alloc::borrow::Cow<'de, [u8]>, Error<R::Error>>
+where
+    R: Read<'de>,
+{
+    use crate::alloc::borrow::Cow;
+
+    let mut output = Cow::Borrowed(b"");
+    let mut seq = BytesSequence::new(name, major, reader);
+    loop {
+        match seq.next()? {
+            BytesDecodeEvent::Reserve(n) => output.try_reserve(n)
+                .map_err(|_| Error::length_overflow(name, n))?,
+            BytesDecodeEvent::Bytes(buf) => {
+                if output.is_empty() {
+                    if let Reference::Long(longbuf) = buf {
+                        output = Cow::Borrowed(longbuf);
+                        continue
+                    }
+                }
+
+                output.to_mut().extend_from_slice(buf.as_ref());
+            },
+            BytesDecodeEvent::End => break
+        }
+    }
+    Ok(types::Bytes(output))
 }
 
 impl<'de> types::Bytes<()> {
@@ -678,22 +616,12 @@ impl<'de> types::Bytes<()> {
     ///
     /// and when false is returned, the consumer has issued a Stop.
     #[inline]
-    pub fn decode_to<R, C>(reader: &mut R, consumer: &mut C)
-        -> Result<bool, Error<R::Error>>
+    pub fn decode_to<R, C>(reader: &mut R)
+        -> BytesSequence<'de, '_, R>
     where
         R: Read<'de>,
-        C: ChunkConsumer<'de>
     {
-        match decode_buf(&"bytes", major::BYTES, reader, consumer)? {
-            ChunkResult::Long(longbuf) => if consumer.push(Reference::Long(longbuf)) {
-                reader.advance(longbuf.len());
-                Ok(true)
-            } else {
-                Ok(false)
-            },
-            ChunkResult::Consumed => Ok(true),
-            ChunkResult::Stop => Ok(false),
-        }
+        BytesSequence::new(&"bytes", major::BYTES, reader)
     }
 }
 
@@ -709,12 +637,7 @@ impl<'de> Decode<'de> for types::Bytes<&'de [u8]> {
 impl<'de> Decode<'de> for types::Bytes<Vec<u8>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let mut vec = VecConsumer::default();
-        if <types::Bytes<()>>::decode_to(reader, &mut vec)? {
-            Ok(types::Bytes(vec.vec))
-        } else {
-            Err(Error::length_overflow(&"bytes", vec.bad_reserve))
-        }
+        decode_buf(&"bytes", major::BYTES, reader)
     }
 }
 
@@ -722,17 +645,7 @@ impl<'de> Decode<'de> for types::Bytes<Vec<u8>> {
 impl<'de> Decode<'de> for types::Bytes<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        use crate::alloc::borrow::Cow;
-
-        let mut vec = VecConsumer::default();
-        match decode_buf(&"bytes", major::BYTES, reader, &mut vec)? {
-            ChunkResult::Long(longbuf) => {
-                reader.advance(longbuf.len());
-                Ok(types::Bytes(Cow::Borrowed(longbuf)))
-            },
-            ChunkResult::Consumed => Ok(types::Bytes(Cow::Owned(vec.vec))),
-            ChunkResult::Stop => Err(Error::length_overflow(&"bytes", vec.bad_reserve)),
-        }
+        decode_cow_buf(&"bytes", major::BYTES, reader)
     }
 }
 
@@ -779,22 +692,12 @@ impl<'de> types::BadStr<()> {
     ///
     /// and when false is returned, the consumer has issued a Stop.
     #[inline]
-    pub fn decode_to<R, C>(reader: &mut R, consumer: &mut C)
-        -> Result<bool, Error<R::Error>>
+    pub fn decode_to<R, C>(reader: &mut R)
+        -> BytesSequence<'de, '_, R>
     where
         R: Read<'de>,
-        C: ChunkConsumer<'de>
     {
-        match decode_buf(&"str", major::STRING, reader, consumer)? {
-            ChunkResult::Long(longbuf) => if consumer.push(Reference::Long(longbuf)) {
-                reader.advance(longbuf.len());
-                Ok(true)
-            } else {
-                Ok(false)
-            },
-            ChunkResult::Consumed => Ok(true),
-            ChunkResult::Stop => Ok(false),
-        }
+        BytesSequence::new(&"str", major::STRING, reader)
     }
 }
 
@@ -810,14 +713,7 @@ impl<'de> Decode<'de> for types::BadStr<&'de [u8]> {
 impl<'de> Decode<'de> for types::BadStr<Vec<u8>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let name = &"str";
-        let mut vec = VecConsumer::default();
-
-        if <types::BadStr<()>>::decode_to(reader, &mut vec)? {
-            Ok(types::BadStr(vec.vec))
-        } else {
-            Err(Error::length_overflow(name, vec.bad_reserve))
-        }
+        decode_buf(&"str", major::STRING, reader)
     }
 }
 
@@ -825,17 +721,7 @@ impl<'de> Decode<'de> for types::BadStr<Vec<u8>> {
 impl<'de> Decode<'de> for types::BadStr<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        use crate::alloc::borrow::Cow;
-
-        let mut vec = VecConsumer::default();
-        match decode_buf(&"str", major::STRING, reader, &mut vec)? {
-            ChunkResult::Long(longbuf) => {
-                reader.advance(longbuf.len());
-                Ok(types::BadStr(Cow::Borrowed(longbuf)))
-            },
-            ChunkResult::Consumed => Ok(types::BadStr(Cow::Owned(vec.vec))),
-            ChunkResult::Stop => Err(Error::length_overflow(&"str", vec.bad_reserve)),
-        }
+        decode_cow_buf(&"str", major::STRING, reader)
     }
 }
 
