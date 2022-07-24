@@ -475,6 +475,7 @@ impl<'de, R> BytesSequence<'de, R>
 where
     R: Read<'de>
 {
+    #[inline]
     pub fn next<'short>(&'short mut self) -> Result<BytesDecodeEvent<'de, 'short>, Error<R::Error>> {
         if self.ready != 0 {
             self.reader.advance(self.ready);
@@ -541,6 +542,7 @@ impl<'de, R> Drop for BytesSequence<'de, R>
 where
     R: Read<'de>
 {
+    #[inline]
     fn drop(&mut self) {
         if self.ready != 0 {
             self.reader.advance(self.ready);
@@ -552,6 +554,7 @@ impl<'de, R> BytesSequence<'de, R>
 where
     R: Read<'de>
 {
+    #[inline]
     pub(crate) fn new(name: error::StaticStr, major: u8, reader: R) -> Self {
         BytesSequence {
             name, major, reader,
@@ -601,8 +604,8 @@ where
                 output.try_reserve(n).map_err(|_| Error::length_overflow(name, n))?;
             },
             BytesDecodeEvent::Bytes(buf) => {
-                if output.is_empty() {
-                    if let Reference::Long(longbuf) = buf {
+                if let Reference::Long(longbuf) = buf {
+                    if output.is_empty() {
                         output = Cow::Borrowed(longbuf);
                         continue
                     }
