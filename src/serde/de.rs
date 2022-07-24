@@ -1,4 +1,5 @@
 use crate::alloc::borrow::Cow;
+use crate::alloc::vec::Vec;
 use serde::de::{ self, Visitor };
 use crate::core::{ major, marker, types, error };
 use crate::core::dec::{ self, Decode };
@@ -294,7 +295,12 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
         -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        self.deserialize_str(visitor)
+        let mut buf = [0; 128];
+        match decode_stack_cow(&"ident", major::STRING, &mut self.reader, &mut buf)? {
+            Cow2Bytes::Long(buf) => visitor.visit_borrowed_bytes(buf),
+            Cow2Bytes::Stack(buf) => visitor.visit_bytes(buf),
+            Cow2Bytes::Owned(buf) => visitor.visit_byte_buf(buf)
+        }
     }
 
     #[inline]
@@ -375,11 +381,10 @@ where
             } else {
                 Ok(None)
             }
-        } else if dec::peek_one(&"break", &mut self.de.reader)? != marker::BREAK {
-            Ok(Some(seed.deserialize(&mut *self.de)?))
-        } else {
-            self.de.reader.advance(1);
+        } else if dec::is_break(&mut self.de.reader)? {
             Ok(None)
+        } else {
+            Ok(Some(seed.deserialize(&mut *self.de)?))
         }
     }
 
@@ -403,11 +408,10 @@ impl<'de, 'a, R: dec::Read<'de>> de::MapAccess<'de> for Accessor<'a, R> {
             } else {
                 Ok(None)
             }
-        } else if dec::peek_one(&"break", &mut self.de.reader)? != marker::BREAK {
-            Ok(Some(seed.deserialize(&mut *self.de)?))
-        } else {
-            self.de.reader.advance(1);
+        } else if dec::is_break(&mut self.de.reader)? {
             Ok(None)
+        } else {
+            Ok(Some(seed.deserialize(&mut *self.de)?))
         }
     }
 
@@ -504,4 +508,82 @@ where
 
         self.de.deserialize_map(visitor)
     }
+}
+
+enum Cow2Bytes<'de, 'stack> {
+    Long(&'de [u8]),
+    Stack(&'stack [u8]),
+    Owned(Vec<u8>)
+}
+
+fn decode_stack_cow<'de, 'stack, R>(name: error::StaticStr, major: u8, reader: &mut R, stack: &'stack mut [u8])
+    -> Result<Cow2Bytes<'de, 'stack>, dec::Error<R::Error>>
+where
+    R: dec::Read<'de>
+{
+    enum Cow3Bytes<'de> {
+        Long(&'de [u8]),
+        Stack(usize),
+        Owned(Vec<u8>)
+    }
+
+    impl Cow3Bytes<'_> {
+        #[inline]
+        fn len(&self) -> usize {
+            match self {
+                Cow3Bytes::Long(buf) => buf.len(),
+                Cow3Bytes::Stack(n) => *n,
+                Cow3Bytes::Owned(buf) => buf.len()
+            }
+        }
+
+        #[inline]
+        fn is_empty(&self) -> bool {
+            self.len() == 0
+        }
+
+        #[inline]
+        fn extend_from_slice(&mut self, stack: &mut [u8], bytes: &[u8]) {
+            let prev_len = self.len();
+
+            if prev_len + bytes.len() <= stack.len() {
+                stack[prev_len..][..bytes.len()].copy_from_slice(bytes);
+                *self = Cow3Bytes::Stack(prev_len + bytes.len())
+            } else {
+                let mut buf = match self {
+                    Cow3Bytes::Long(buf) => buf.to_vec(),
+                    Cow3Bytes::Stack(n) => stack[..*n].to_vec(),
+                    Cow3Bytes::Owned(buf) => core::mem::replace(buf, Vec::new())
+                };
+                buf.extend_from_slice(bytes);
+                *self = Cow3Bytes::Owned(buf)
+            }
+        }
+    }
+
+    let mut output = Cow3Bytes::Long(&[][..]);
+    let mut seq = dec::BytesSequence::new(name, major, reader);
+    loop {
+        match seq.next()? {
+            dec::BytesDecodeEvent::Reserve(n) => if let Cow3Bytes::Owned(output) = &mut output {
+                output.try_reserve(n).map_err(|_| dec::Error::length_overflow(name, n))?;
+            },
+            dec::BytesDecodeEvent::Bytes(buf) => {
+                if let dec::Reference::Long(longbuf) = buf {
+                    if output.is_empty() {
+                        output = Cow3Bytes::Long(longbuf);
+                        continue
+                    }
+                }
+                output.extend_from_slice(stack, buf.as_ref());
+            },
+            dec::BytesDecodeEvent::End => break
+        }
+    }
+
+    Ok(match output {
+        Cow3Bytes::Long(buf) => Cow2Bytes::Long(buf),
+        Cow3Bytes::Stack(n) => Cow2Bytes::Stack(&stack[..n]),
+        Cow3Bytes::Owned(buf) => Cow2Bytes::Owned(buf)
+    })
 }
