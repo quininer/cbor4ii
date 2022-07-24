@@ -1,19 +1,20 @@
 //! serde support
 
+mod error;
 mod ser;
-#[cfg(feature = "use_alloc")] mod de;
+mod de;
 
 #[cfg(feature = "use_std")]
 mod io_writer {
     use std::io;
     use serde::Serialize;
-    use crate::core::enc;
     use crate::core::utils::IoWriter;
+    use crate::serde::error::EncodeError;
     use crate::serde::ser;
 
     /// Serializes a value to a writer.
     pub fn to_writer<W, T>(writer: &mut W, value: &T)
-        -> Result<(), enc::Error<io::Error>>
+        -> Result<(), EncodeError<io::Error>>
     where
         W: io::Write,
         T: Serialize
@@ -24,18 +25,17 @@ mod io_writer {
     }
 }
 
-#[cfg(feature = "use_alloc")]
 mod buf_writer {
     use crate::alloc::vec::Vec;
     use crate::alloc::collections::TryReserveError;
     use serde::Serialize;
-    use crate::core::enc;
     use crate::core::utils::BufWriter;
+    use crate::serde::error::EncodeError;
     use crate::serde::ser;
 
     /// Serializes a value to a writer.
     pub fn to_vec<T>(buf: Vec<u8>, value: &T)
-        -> Result<Vec<u8>, enc::Error<TryReserveError>>
+        -> Result<Vec<u8>, EncodeError<TryReserveError>>
     where T: Serialize
     {
         let writer = BufWriter::new(buf);
@@ -47,12 +47,12 @@ mod buf_writer {
 
 mod slice_reader {
     use core::convert::Infallible;
-    use crate::core::dec;
     use crate::core::utils::SliceReader;
     use crate::serde::de;
+    use crate::serde::error::DecodeError;
 
     /// Decodes a value from a bytes.
-    pub fn from_slice<'a, T>(buf: &'a [u8]) -> Result<T, dec::Error<Infallible>>
+    pub fn from_slice<'a, T>(buf: &'a [u8]) -> Result<T, DecodeError<Infallible>>
     where
         T: serde::Deserialize<'a>,
     {
@@ -65,12 +65,12 @@ mod slice_reader {
 #[cfg(feature = "use_std")]
 mod io_buf_reader {
     use std::io::{ self, BufRead };
-    use crate::core::dec;
     use crate::core::utils::IoReader;
     use crate::serde::de;
+    use crate::serde::error::DecodeError;
 
     /// Decodes a value from a reader.
-    pub fn from_reader<T, R>(reader: R) -> Result<T, dec::Error<io::Error>>
+    pub fn from_reader<T, R>(reader: R) -> Result<T, DecodeError<io::Error>>
     where
         T: serde::de::DeserializeOwned,
         R: BufRead
@@ -82,11 +82,10 @@ mod io_buf_reader {
 }
 
 #[cfg(feature = "use_std")] pub use io_writer::to_writer;
-#[cfg(feature = "use_alloc")] pub use buf_writer::to_vec;
 #[cfg(feature = "use_std")] pub use io_buf_reader::from_reader;
+pub use buf_writer::to_vec;
 pub use slice_reader::from_slice;
 
+pub use error::{ EncodeError, DecodeError };
 pub use ser::Serializer;
-
-#[cfg(feature = "use_alloc")]
 pub use de::Deserializer;

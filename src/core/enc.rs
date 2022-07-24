@@ -2,7 +2,7 @@
 
 use core::convert::TryFrom;
 use crate::core::{ types, major, marker };
-pub use crate::error::EncodeError as Error;
+pub use crate::core::error::EncodeError as Error;
 
 
 /// Write trait

@@ -2,6 +2,7 @@ use core::fmt;
 use serde::Serialize;
 use crate::core::types;
 use crate::core::enc::{ self, Encode };
+use crate::serde::error::EncodeError;
 
 
 pub struct Serializer<W> {
@@ -20,7 +21,7 @@ impl<W> Serializer<W> {
 
 impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     type Ok = ();
-    type Error = enc::Error<W::Error>;
+    type Error = EncodeError<W::Error>;
 
     type SerializeSeq = Collect<'a, W>;
     type SerializeTuple = BoundedCollect<'a, W>;
@@ -277,11 +278,12 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
 
         if let Err(err) = write!(&mut writer, "{}", value) {
             if !writer.is_error() {
-                return Err(enc::Error::custom(err));
+                return Err(EncodeError::custom(err));
             }
         }
 
-        writer.flush()
+        writer.flush()?;
+        Ok(())
     }
 
     #[inline]
@@ -301,7 +303,7 @@ pub struct BoundedCollect<'a, W> {
 
 impl<W: enc::Write> serde::ser::SerializeSeq for Collect<'_, W> {
     type Ok = ();
-    type Error = enc::Error<W::Error>;
+    type Error = EncodeError<W::Error>;
 
     #[inline]
     fn serialize_element<T: Serialize + ?Sized>(&mut self, value: &T)
@@ -322,7 +324,7 @@ impl<W: enc::Write> serde::ser::SerializeSeq for Collect<'_, W> {
 
 impl<W: enc::Write> serde::ser::SerializeTuple for BoundedCollect<'_, W> {
     type Ok = ();
-    type Error = enc::Error<W::Error>;
+    type Error = EncodeError<W::Error>;
 
     #[inline]
     fn serialize_element<T: Serialize + ?Sized>(&mut self, value: &T)
@@ -339,7 +341,7 @@ impl<W: enc::Write> serde::ser::SerializeTuple for BoundedCollect<'_, W> {
 
 impl<W: enc::Write> serde::ser::SerializeTupleStruct for BoundedCollect<'_, W> {
     type Ok = ();
-    type Error = enc::Error<W::Error>;
+    type Error = EncodeError<W::Error>;
 
     #[inline]
     fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T)
@@ -356,7 +358,7 @@ impl<W: enc::Write> serde::ser::SerializeTupleStruct for BoundedCollect<'_, W> {
 
 impl<W: enc::Write> serde::ser::SerializeTupleVariant for BoundedCollect<'_, W> {
     type Ok = ();
-    type Error = enc::Error<W::Error>;
+    type Error = EncodeError<W::Error>;
 
     #[inline]
     fn serialize_field<T: Serialize + ?Sized>(&mut self, value: &T)
@@ -373,7 +375,7 @@ impl<W: enc::Write> serde::ser::SerializeTupleVariant for BoundedCollect<'_, W> 
 
 impl<W: enc::Write> serde::ser::SerializeMap for Collect<'_, W> {
     type Ok = ();
-    type Error = enc::Error<W::Error>;
+    type Error = EncodeError<W::Error>;
 
     #[inline]
     fn serialize_key<T: Serialize + ?Sized>(&mut self, key: &T)
@@ -401,7 +403,7 @@ impl<W: enc::Write> serde::ser::SerializeMap for Collect<'_, W> {
 
 impl<W: enc::Write> serde::ser::SerializeStruct for BoundedCollect<'_, W> {
     type Ok = ();
-    type Error = enc::Error<W::Error>;
+    type Error = EncodeError<W::Error>;
 
     #[inline]
     fn serialize_field<T: Serialize + ?Sized>(&mut self, key: &'static str, value: &T)
@@ -419,7 +421,7 @@ impl<W: enc::Write> serde::ser::SerializeStruct for BoundedCollect<'_, W> {
 
 impl<W: enc::Write> serde::ser::SerializeStructVariant for BoundedCollect<'_, W> {
     type Ok = ();
-    type Error = enc::Error<W::Error>;
+    type Error = EncodeError<W::Error>;
 
     #[inline]
     fn serialize_field<T: Serialize + ?Sized>(&mut self, key: &'static str, value: &T)
