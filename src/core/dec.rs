@@ -447,13 +447,13 @@ fn decode_bytes<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &m
     }
 }
 
-pub struct BytesSequence<'de, 'short, R>
+pub struct BytesSequence<'de, R>
 where
     R: Read<'de>
 {
     name: error::StaticStr,
     major: u8,
-    reader: &'short mut R,
+    reader: R,
     started: bool,
     level: usize,
     remaining: usize,
@@ -467,11 +467,11 @@ pub enum BytesDecodeEvent<'de, 'short> {
     End
 }
 
-impl<'de, 'short, R> BytesSequence<'de, 'short, R>
+impl<'de, R> BytesSequence<'de, R>
 where
     R: Read<'de>
 {
-    pub fn next(&'short mut self) -> Result<BytesDecodeEvent<'de, 'short>, Error<R::Error>> {
+    pub fn next<'short>(&'short mut self) -> Result<BytesDecodeEvent<'de, 'short>, Error<R::Error>> {
         if self.ready != 0 {
             self.reader.advance(self.ready);
             self.ready = 0;
@@ -483,7 +483,7 @@ where
                 (0, 0) => {
                     self.started = true;
 
-                    match decode_len(self.name, self.major, self.reader)? {
+                    match decode_len(self.name, self.major, &mut self.reader)? {
                         Some(len) => {
                             self.remaining = len;
                             return Ok(BytesDecodeEvent::Reserve(len));
@@ -496,12 +496,12 @@ where
                     }
                 },
                 (level, 0) => {
-                    if is_break(self.reader)? {
+                    if is_break(&mut self.reader)? {
                         self.level = level - 1;
                         continue
                     }
 
-                    match decode_len(self.name, self.major, self.reader)? {
+                    match decode_len(self.name, self.major, &mut self.reader)? {
                         Some(len) => {
                             self.remaining = len;
                             return Ok(BytesDecodeEvent::Reserve(len));
@@ -533,7 +533,7 @@ where
     }
 }
 
-impl<'de, 'short, R> Drop for BytesSequence<'de, 'short, R>
+impl<'de, R> Drop for BytesSequence<'de, R>
 where
     R: Read<'de>
 {
@@ -544,11 +544,11 @@ where
     }
 }
 
-impl<'de, 'short, R> BytesSequence<'de, 'short, R>
+impl<'de, R> BytesSequence<'de, R>
 where
     R: Read<'de>
 {
-    pub(crate) fn new(name: error::StaticStr, major: u8, reader: &'short mut R) -> Self {
+    pub(crate) fn new(name: error::StaticStr, major: u8, reader: R) -> Self {
         BytesSequence {
             name, major, reader,
             started: false,
@@ -574,10 +574,10 @@ where
             BytesDecodeEvent::Reserve(n) => output.try_reserve(n)
                 .map_err(|_| Error::length_overflow(name, n))?,
             BytesDecodeEvent::Bytes(buf) => output.extend_from_slice(buf.as_ref()),
-            BytesDecodeEvent::End => break
+            BytesDecodeEvent::End => break,
         }
     }
-    Ok(types::Bytes(output))
+    Ok(output)
 }
 
 #[cfg(feature = "use_alloc")]
@@ -589,12 +589,13 @@ where
 {
     use crate::alloc::borrow::Cow;
 
-    let mut output = Cow::Borrowed(b"");
+    let mut output = Cow::Borrowed(&[][..]);
     let mut seq = BytesSequence::new(name, major, reader);
     loop {
         match seq.next()? {
-            BytesDecodeEvent::Reserve(n) => output.try_reserve(n)
-                .map_err(|_| Error::length_overflow(name, n))?,
+            BytesDecodeEvent::Reserve(n) => if let Cow::Owned(output) = &mut output {
+                output.try_reserve(n).map_err(|_| Error::length_overflow(name, n))?;
+            },
             BytesDecodeEvent::Bytes(buf) => {
                 if output.is_empty() {
                     if let Reference::Long(longbuf) = buf {
@@ -608,16 +609,14 @@ where
             BytesDecodeEvent::End => break
         }
     }
-    Ok(types::Bytes(output))
+    Ok(output)
 }
 
 impl<'de> types::Bytes<()> {
-    /// Decode the bytes into the consumer.
-    ///
-    /// and when false is returned, the consumer has issued a Stop.
+    /// Decode into bytes sequence.
     #[inline]
-    pub fn decode_to<R, C>(reader: &mut R)
-        -> BytesSequence<'de, '_, R>
+    pub fn decode_into<R, C>(reader: R)
+        -> BytesSequence<'de, R>
     where
         R: Read<'de>,
     {
@@ -637,7 +636,8 @@ impl<'de> Decode<'de> for types::Bytes<&'de [u8]> {
 impl<'de> Decode<'de> for types::Bytes<Vec<u8>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        decode_buf(&"bytes", major::BYTES, reader)
+        let buf = decode_buf(&"bytes", major::BYTES, reader)?;
+        Ok(types::Bytes(buf))
     }
 }
 
@@ -645,7 +645,8 @@ impl<'de> Decode<'de> for types::Bytes<Vec<u8>> {
 impl<'de> Decode<'de> for types::Bytes<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        decode_cow_buf(&"bytes", major::BYTES, reader)
+        let buf = decode_cow_buf(&"bytes", major::BYTES, reader)?;
+        Ok(types::Bytes(buf))
     }
 }
 
@@ -688,12 +689,10 @@ impl<'de> Decode<'de> for crate::alloc::borrow::Cow<'de, str> {
 }
 
 impl<'de> types::BadStr<()> {
-    /// Decode the string bytes into the consumer.
-    ///
-    /// and when false is returned, the consumer has issued a Stop.
+    /// Decode into string sequence (but no utf8 check).
     #[inline]
-    pub fn decode_to<R, C>(reader: &mut R)
-        -> BytesSequence<'de, '_, R>
+    pub fn decode_into<R, C>(reader: R)
+        -> BytesSequence<'de, R>
     where
         R: Read<'de>,
     {
@@ -713,7 +712,8 @@ impl<'de> Decode<'de> for types::BadStr<&'de [u8]> {
 impl<'de> Decode<'de> for types::BadStr<Vec<u8>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        decode_buf(&"str", major::STRING, reader)
+        let buf = decode_buf(&"str", major::STRING, reader)?;
+        Ok(types::BadStr(buf))
     }
 }
 
@@ -721,7 +721,8 @@ impl<'de> Decode<'de> for types::BadStr<Vec<u8>> {
 impl<'de> Decode<'de> for types::BadStr<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        decode_cow_buf(&"str", major::STRING, reader)
+        let buf = decode_cow_buf(&"str", major::STRING, reader)?;
+        Ok(types::BadStr(buf))
     }
 }
 
