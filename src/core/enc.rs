@@ -215,16 +215,16 @@ impl Encode for types::Bytes<&'_ [u8]> {
 impl Encode for &'_ str {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        types::BadStr::bounded(self.len(), writer)?;
+        types::UncheckedStr::bounded(self.len(), writer)?;
         writer.push(self.as_bytes())?;
         Ok(())
     }
 }
 
-impl Encode for types::BadStr<&'_ [u8]> {
+impl Encode for types::UncheckedStr<&'_ [u8]> {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        types::BadStr::bounded(self.0.len(), writer)?;
+        types::UncheckedStr::bounded(self.0.len(), writer)?;
         writer.push(self.0)?;
         Ok(())
     }
@@ -287,7 +287,7 @@ bound_unbound_end! {
     types::Array<()>, major::ARRAY;
     types::Map<()>, major::MAP;
     types::Bytes<()>, major::BYTES;
-    types::BadStr<()>, major::STRING;
+    types::UncheckedStr<()>, major::STRING;
 }
 
 impl<T: Encode> Encode for types::Tag<T> {
@@ -553,10 +553,10 @@ fn test_encoded() -> anyhow::Result<()> {
     // (_ "strea", "ming")
     {
         buf.0.clear();
-        types::BadStr::unbounded(&mut buf)?;
+        types::UncheckedStr::unbounded(&mut buf)?;
         "strea".encode(&mut buf)?;
         "ming".encode(&mut buf)?;
-        types::BadStr::end(&mut buf)?;
+        types::UncheckedStr::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x7f657374726561646d696e67ff");
     }

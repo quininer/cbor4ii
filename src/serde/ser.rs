@@ -473,8 +473,8 @@ impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
                     self.pos += input.len();
                 } else {
                     self.state = State::Segment;
-                    try_!(types::BadStr::unbounded(self.inner));
-                    try_!(types::BadStr(&self.buf[..self.pos]).encode(self.inner));
+                    try_!(types::UncheckedStr::unbounded(self.inner));
+                    try_!(types::UncheckedStr(&self.buf[..self.pos]).encode(self.inner));
                     try_!(input.encode(self.inner));
                 }
 
@@ -507,8 +507,8 @@ impl<W: enc::Write> FmtWriter<'_, W> {
     #[inline]
     fn flush(self) -> Result<(), enc::Error<W::Error>> {
         match self.state {
-            State::Short => types::BadStr(&self.buf[..self.pos]).encode(self.inner),
-            State::Segment => types::BadStr::end(self.inner),
+            State::Short => types::UncheckedStr(&self.buf[..self.pos]).encode(self.inner),
+            State::Segment => types::UncheckedStr::end(self.inner),
             State::Error(err) => Err(err)
         }
     }

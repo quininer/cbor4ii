@@ -576,7 +576,7 @@ impl<'de> Decode<'de> for &'de str {
 impl<'de> Decode<'de> for String {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let types::BadStr(buf) = <types::BadStr<Vec<u8>>>::decode(reader)?;
+        let types::UncheckedStr(buf) = <types::UncheckedStr<Vec<u8>>>::decode(reader)?;
         String::from_utf8(buf).map_err(|_| Error::require_utf8(&"str"))
     }
 }
@@ -588,7 +588,7 @@ impl<'de> Decode<'de> for crate::alloc::borrow::Cow<'de, str> {
         use crate::alloc::borrow::Cow;
 
         let name = &"str";
-        let types::BadStr(buf) = <types::BadStr<Cow<'_, [u8]>>>::decode(reader)?;
+        let types::UncheckedStr(buf) = <types::UncheckedStr<Cow<'_, [u8]>>>::decode(reader)?;
 
         match buf {
             Cow::Borrowed(buf) => core::str::from_utf8(buf)
@@ -601,29 +601,29 @@ impl<'de> Decode<'de> for crate::alloc::borrow::Cow<'de, str> {
     }
 }
 
-impl<'de> Decode<'de> for types::BadStr<&'de [u8]> {
+impl<'de> Decode<'de> for types::UncheckedStr<&'de [u8]> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let buf = decode_bytes_ref(&"str", major::STRING, reader)?;
-        Ok(types::BadStr(buf))
+        Ok(types::UncheckedStr(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'de> Decode<'de> for types::BadStr<Vec<u8>> {
+impl<'de> Decode<'de> for types::UncheckedStr<Vec<u8>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let buf = decode_buf(&"str", major::STRING, reader)?;
-        Ok(types::BadStr(buf))
+        Ok(types::UncheckedStr(buf))
     }
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'de> Decode<'de> for types::BadStr<crate::alloc::borrow::Cow<'de, [u8]>> {
+impl<'de> Decode<'de> for types::UncheckedStr<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let buf = decode_cow_buf(&"str", major::STRING, reader)?;
-        Ok(types::BadStr(buf))
+        Ok(types::UncheckedStr(buf))
     }
 }
 

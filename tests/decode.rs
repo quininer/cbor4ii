@@ -34,11 +34,11 @@ fn test_decode_value() {
 #[test]
 fn test_decode_buf_segment() -> anyhow::Result<()> {
     let mut writer = BufWriter::new(Vec::new());
-    types::BadStr::unbounded(&mut writer)?;
+    types::UncheckedStr::unbounded(&mut writer)?;
     "test".encode(&mut writer)?;
     "test2".encode(&mut writer)?;
     "test3".encode(&mut writer)?;
-    types::BadStr::end(&mut writer)?;
+    types::UncheckedStr::end(&mut writer)?;
 
     let mut reader = SliceReader::new(writer.buffer());
     let output = String::decode(&mut reader)?;
