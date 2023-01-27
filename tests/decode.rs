@@ -269,7 +269,6 @@ fn test_tag_start() {
     assert_eq!(tag_len8.0, 42);
 }
 
-
 #[test]
 fn test_ignored_any_eof_loop() {
     let mut buf = BufWriter::new(Vec::new());
@@ -283,7 +282,9 @@ fn test_ignored_any_eof_loop() {
     let ret = dec::IgnoredAny::decode(&mut reader);
 
     match ret {
-        Err(dec::Error::Eof) => (),
+        Err(dec::Error::Eof { name, .. }) => {
+            assert_eq!(name, &"ignored-any");
+        },
         _ => panic!()
     }
 }
