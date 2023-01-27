@@ -637,9 +637,9 @@ impl<'de> types::Array<()> {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'de, T: Decode<'de>> types::Array<Vec<T>> {
+impl<'de, T: Decode<'de>> Decode<'de> for Vec<T> {
     #[inline]
-    fn values<R: Read<'de>>(maybe_len: Option<usize>, reader: &mut R) -> Result<Vec<T>, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"array";
         let mut arr = Vec::new();
 
@@ -649,7 +649,7 @@ impl<'de, T: Decode<'de>> types::Array<Vec<T>> {
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());
         let reader = &mut *reader;
 
-        if let Some(len) = maybe_len {
+        if let Some(len) = types::Array::len(reader)? {
             arr.reserve(core::cmp::min(len, 256)); // TODO try_reserve ?
 
             for _ in 0..len {
@@ -667,15 +667,6 @@ impl<'de, T: Decode<'de>> types::Array<Vec<T>> {
     }
 }
 
-#[cfg(feature = "use_alloc")]
-impl<'de, T: Decode<'de>> Decode<'de> for Vec<T> {
-    #[inline]
-    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let len = types::Array::len(reader)?;
-        types::Array::values(len, reader)
-    }
-}
-
 impl<'de> types::Map<()> {
     #[inline]
     pub fn len<R: Read<'de>>(reader: &mut R) -> Result<Option<usize>, Error<R::Error>> {
@@ -684,9 +675,9 @@ impl<'de> types::Map<()> {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'de, K: Decode<'de>, V: Decode<'de>> types::Map<Vec<(K, V)>> {
+impl<'de, K: Decode<'de>, V: Decode<'de>> Decode<'de> for types::Map<Vec<(K, V)>> {
     #[inline]
-    pub fn values<R: Read<'de>>(maybe_len: Option<usize>, reader: &mut R) -> Result<Vec<(K, V)>, Error<R::Error>> {
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"map";
         let mut map = Vec::new();
 
@@ -696,7 +687,7 @@ impl<'de, K: Decode<'de>, V: Decode<'de>> types::Map<Vec<(K, V)>> {
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());
         let reader = &mut *reader;
 
-        if let Some(len) = maybe_len {
+        if let Some(len) = types::Map::len(reader)? {
             map.reserve(core::cmp::min(len, 256)); // TODO try_reserve ?
 
             for _ in 0..len {
@@ -712,16 +703,6 @@ impl<'de, K: Decode<'de>, V: Decode<'de>> types::Map<Vec<(K, V)>> {
             }
         }
 
-        Ok(map)
-    }
-}
-
-#[cfg(feature = "use_alloc")]
-impl<'de, K: Decode<'de>, V: Decode<'de>> Decode<'de> for types::Map<Vec<(K, V)>> {
-    #[inline]
-    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let len = types::Map::len(reader)?;
-        let map = types::Map::values(len, reader)?;
         Ok(types::Map(map))
     }
 }
