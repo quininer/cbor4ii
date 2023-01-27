@@ -19,6 +19,8 @@ fn bench_de(c: &mut Criterion) {
         let mut map = HashMap::new();
         map.insert("key".into(), "value".into());
         map.insert("id".into(), "1".into());
+        let v = (0..123).map(|_| 'a').collect::<String>();
+        map.insert("a".into(), v);
         map
     };
     let msg = {
