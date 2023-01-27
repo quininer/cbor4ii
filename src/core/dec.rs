@@ -154,10 +154,16 @@ fn pull_exact<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R, mut buf
 }
 
 #[inline]
-fn skip_exact<'de, R: Read<'de>>(reader: &mut R, mut len: usize) -> Result<(), R::Error> {
+fn skip_exact<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R, mut len: usize)
+    -> Result<(), Error<R::Error>>
+{
     while len != 0 {
         let buf = reader.fill(len)?;
         let buf = buf.as_ref();
+
+        if buf.is_empty() {
+            return Err(Error::eof(name, len));
+        }
 
         let buflen = core::cmp::min(len, buf.len());
         reader.advance(buflen);
@@ -842,13 +848,13 @@ impl<'de> Decode<'de> for IgnoredAny {
                     0x1b => 8,
                     _ => return Err(Error::mismatch(name, byte))
                 };
-                skip_exact(reader, skip + 1)?;
+                skip_exact(name, reader, skip + 1)?;
             },
             major @ major::BYTES | major @ major::STRING |
             major @ major::ARRAY | major @ major::MAP => {
                 if let Some(len) = decode_len(name, major, reader)? {
                     match major {
-                        major::BYTES | major::STRING => skip_exact(reader, len)?,
+                        major::BYTES | major::STRING => skip_exact(name, reader, len)?,
                         major::ARRAY | major::MAP => for _ in 0..len {
                             let _ignore = IgnoredAny::decode(reader)?;
 
@@ -883,7 +889,7 @@ impl<'de> Decode<'de> for IgnoredAny {
                     marker::F64 => 8,
                     _ => return Err(Error::unsupported(name, byte))
                 };
-                skip_exact(reader, skip + 1)?;
+                skip_exact(name, reader, skip + 1)?;
             },
             _ => return Err(Error::unsupported(name, byte))
         }

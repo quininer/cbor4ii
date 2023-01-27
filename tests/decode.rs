@@ -268,3 +268,23 @@ fn test_tag_start() {
     let tag_len8 = dec::TagStart::decode(&mut reader_tag_len8).unwrap();
     assert_eq!(tag_len8.0, 42);
 }
+
+#[test]
+fn test_ignored_any_eof_loop() {
+    let mut buf = BufWriter::new(Vec::new());
+    "aaa".encode(&mut buf).unwrap();
+
+    // bad input
+    let mut buf = buf.into_inner();
+    buf.pop();
+
+    let mut reader = SliceReader::new(&buf);
+    let ret = dec::IgnoredAny::decode(&mut reader);
+
+    match ret {
+        Err(dec::Error::Eof { name, .. }) => {
+            assert_eq!(name, &"ignored-any");
+        },
+        _ => panic!()
+    }
+}
