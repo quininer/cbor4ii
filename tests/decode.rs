@@ -34,11 +34,11 @@ fn test_decode_value() {
 #[test]
 fn test_decode_buf_segment() -> anyhow::Result<()> {
     let mut writer = BufWriter::new(Vec::new());
-    enc::StrStart.encode(&mut writer)?;
+    types::BadStr::unbounded(&mut writer)?;
     "test".encode(&mut writer)?;
     "test2".encode(&mut writer)?;
     "test3".encode(&mut writer)?;
-    enc::End.encode(&mut writer)?;
+    types::BadStr::end(&mut writer)?;
 
     let mut reader = SliceReader::new(writer.buffer());
     let output = String::decode(&mut reader)?;
@@ -94,11 +94,11 @@ fn test_decode_array_map() -> anyhow::Result<()> {
 
     // map unbounded
     let mut writer = BufWriter::new(Vec::new());
-    enc::MapStartUnbounded.encode(&mut writer)?;
+    types::Map::unbounded(&mut writer)?;
     for i in 0u64..6 {
         i.encode(&mut writer)?;
     }
-    enc::End.encode(&mut writer)?;
+    types::Map::end(&mut writer)?;
 
     let mut reader = SliceReader::new(writer.buffer());
     let len = types::Map::len(&mut reader)?;

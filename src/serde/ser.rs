@@ -130,7 +130,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        enc::ArrayStartBounded(0).encode(&mut self.writer)?;
+        types::Array::bounded(0, &mut self.writer)?;
         Ok(())
     }
 
@@ -168,7 +168,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         variant: &'static str,
         value: &T
     ) -> Result<Self::Ok, Self::Error> {
-        enc::MapStartBounded(1).encode(&mut self.writer)?;
+        types::Map::bounded(1, &mut self.writer)?;
         variant.encode(&mut self.writer)?;
         value.serialize(self)
     }
@@ -178,9 +178,9 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         -> Result<Self::SerializeSeq, Self::Error>
     {
         if let Some(len) = len {
-            enc::ArrayStartBounded(len).encode(&mut self.writer)?;
+            types::Array::bounded(len, &mut self.writer)?;
         } else {
-            enc::ArrayStartUnbounded.encode(&mut self.writer)?;
+            types::Array::unbounded(&mut self.writer)?;
         }
         Ok(Collect {
             bounded: len.is_some(),
@@ -192,7 +192,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_tuple(self, len: usize)
         -> Result<Self::SerializeTuple, Self::Error>
     {
-        enc::ArrayStartBounded(len).encode(&mut self.writer)?;
+        types::Array::bounded(len, &mut self.writer)?;
         Ok(BoundedCollect { ser: self })
     }
 
@@ -211,9 +211,9 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         variant: &'static str,
         len: usize
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        enc::MapStartBounded(1).encode(&mut self.writer)?;
+        types::Map::bounded(1, &mut self.writer)?;
         variant.encode(&mut self.writer)?;
-        enc::ArrayStartBounded(len).encode(&mut self.writer)?;
+        types::Array::bounded(len, &mut self.writer)?;
         Ok(BoundedCollect { ser: self })
     }
 
@@ -222,9 +222,9 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         -> Result<Self::SerializeMap, Self::Error>
     {
         if let Some(len) = len {
-            enc::MapStartBounded(len).encode(&mut self.writer)?;
+            types::Map::bounded(len, &mut self.writer)?;
         } else {
-            enc::MapStartUnbounded.encode(&mut self.writer)?;
+            types::Map::unbounded(&mut self.writer)?;
         }
         Ok(Collect {
             bounded: len.is_some(),
@@ -236,7 +236,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     fn serialize_struct(self, _name: &'static str, len: usize)
         -> Result<Self::SerializeStruct, Self::Error>
     {
-        enc::MapStartBounded(len).encode(&mut self.writer)?;
+        types::Map::bounded(len, &mut self.writer)?;
         Ok(BoundedCollect { ser: self })
     }
 
@@ -248,9 +248,9 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
         variant: &'static str,
         len: usize
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        enc::MapStartBounded(1).encode(&mut self.writer)?;
+        types::Map::bounded(1, &mut self.writer)?;
         variant.encode(&mut self.writer)?;
-        enc::MapStartBounded(len).encode(&mut self.writer)?;
+        types::Map::bounded(len, &mut self.writer)?;
         Ok(BoundedCollect { ser: self })
     }
 
@@ -315,7 +315,7 @@ impl<W: enc::Write> serde::ser::SerializeSeq for Collect<'_, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         if !self.bounded {
-            enc::End.encode(&mut self.ser.writer)?;
+            types::Array::end(&mut self.ser.writer)?;
         }
 
         Ok(())
@@ -394,7 +394,7 @@ impl<W: enc::Write> serde::ser::SerializeMap for Collect<'_, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         if !self.bounded {
-            enc::End.encode(&mut self.ser.writer)?;
+            types::Map::end(&mut self.ser.writer)?;
         }
 
         Ok(())
@@ -473,7 +473,7 @@ impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
                     self.pos += input.len();
                 } else {
                     self.state = State::Segment;
-                    try_!(enc::StrStart.encode(self.inner));
+                    try_!(types::BadStr::unbounded(self.inner));
                     try_!(types::BadStr(&self.buf[..self.pos]).encode(self.inner));
                     try_!(input.encode(self.inner));
                 }
@@ -508,7 +508,7 @@ impl<W: enc::Write> FmtWriter<'_, W> {
     fn flush(self) -> Result<(), enc::Error<W::Error>> {
         match self.state {
             State::Short => types::BadStr(&self.buf[..self.pos]).encode(self.inner),
-            State::Segment => enc::End.encode(self.inner),
+            State::Segment => types::BadStr::end(self.inner),
             State::Error(err) => Err(err)
         }
     }
