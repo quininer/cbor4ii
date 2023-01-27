@@ -152,10 +152,14 @@ fn pull_exact<'a, R: Read<'a>>(reader: &mut R, mut buf: &mut [u8]) -> Result<(),
 }
 
 #[inline]
-fn skip_exact<'de, R: Read<'de>>(reader: &mut R, mut len: usize) -> Result<(), R::Error> {
+fn skip_exact<'de, R: Read<'de>>(reader: &mut R, mut len: usize) -> Result<(), Error<R::Error>> {
     while len != 0 {
         let buf = reader.fill(len)?;
         let buf = buf.as_ref();
+
+        if buf.is_empty() {
+            return Err(Error::Eof);
+        }
 
         let buflen = core::cmp::min(len, buf.len());
         reader.advance(buflen);
