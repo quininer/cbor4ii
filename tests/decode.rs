@@ -271,15 +271,6 @@ fn test_tag() {
 }
 
 #[test]
-fn test_tag_value() {
-    let mut reader = SliceReader::new(&[0xc1, 0x1a, 0x51, 0x4b, 0x67, 0xb0]);
-    let tag = types::Tag::tag(&mut reader).unwrap();
-    assert_eq!(tag, 1);
-    let value: u64 = types::Tag::value(&mut reader).unwrap();
-    assert_eq!(value,  1363896240u64);
-}
-
-#[test]
 fn test_ignored_any_eof_loop() {
     let mut buf = BufWriter::new(Vec::new());
     "aaa".encode(&mut buf).unwrap();

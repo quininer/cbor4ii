@@ -732,18 +732,12 @@ impl<'de> types::Tag<()> {
         TypeNum::new(&"tag", major::TAG).decode_u64(reader)
     }
 }
-impl<'de, T: Decode<'de>> types::Tag<T> {
-    #[inline]
-    pub fn value<R: Read<'de>>(reader: &mut R) -> Result<T, Error<R::Error>> {
-       T::decode(reader)
-    }
-}
 
 impl<'de, T: Decode<'de>> Decode<'de> for types::Tag<T> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let tag = types::Tag::tag(reader)?;
-        let value = types::Tag::value(reader)?;
+        let value = T::decode(reader)?;
         Ok(types::Tag(tag, value))
     }
 }
