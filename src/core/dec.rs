@@ -434,7 +434,7 @@ fn decode_len<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &mut
 }
 
 #[inline]
-fn decode_bytes<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &mut R)
+fn decode_bytes_ref<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &mut R)
     -> Result<&'de [u8], Error<R::Error>>
 {
     let len = TypeNum::new(name, major).decode_u64(reader)?;
@@ -451,119 +451,55 @@ fn decode_bytes<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &m
     }
 }
 
-pub struct BytesSequence<'de, R>
-where
-    R: Read<'de>
+#[inline]
+#[cfg(feature = "use_alloc")]
+fn decode_bytes<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R, buf: &mut Vec<u8>)
+    -> Result<Option<&'a [u8]>, Error<R::Error>>
 {
-    name: error::StaticStr,
-    major: u8,
-    reader: R,
-    started: bool,
-    level: usize,
-    remaining: usize,
-    ready: usize,
-    _phantom: core::marker::PhantomData<&'de [u8]>
-}
+    const CAP_LIMIT: usize = 16 * 1024;
 
-pub enum BytesDecodeEvent<'de, 'short> {
-    Reserve(usize),
-    Bytes(Reference<'de, 'short>),
-    End
-}
-
-impl<'de, R> BytesSequence<'de, R>
-where
-    R: Read<'de>
-{
-    #[inline]
-    pub fn next<'short>(&'short mut self) -> Result<BytesDecodeEvent<'de, 'short>, Error<R::Error>> {
-        if self.ready != 0 {
-            self.reader.advance(self.ready);
-            self.ready = 0;
-        }
-
-        loop {
-            match (self.level, self.remaining) {
-                (0, 0) if self.started => return Ok(BytesDecodeEvent::End),
-                (0, 0) => {
-                    self.started = true;
-
-                    match decode_len(self.name, self.major, &mut self.reader)? {
-                        Some(len) => {
-                            self.remaining = len;
-                            return Ok(BytesDecodeEvent::Reserve(len));
-                        },
-                        None => {
-                            self.level = self.level.checked_add(1)
-                                .ok_or_else(|| Error::depth_overflow(self.name))?;
-                            continue
-                        }
-                    }
-                },
-                (level, 0) => {
-                    if is_break(&mut self.reader)? {
-                        self.level = level - 1;
-                        continue
-                    }
-
-                    match decode_len(self.name, self.major, &mut self.reader)? {
-                        Some(len) => {
-                            self.remaining = len;
-                            return Ok(BytesDecodeEvent::Reserve(len));
-                        },
-                        None => {
-                            self.level = self.level.checked_add(1)
-                                .ok_or_else(|| Error::depth_overflow(self.name))?;
-                            continue
-                        }
-                    }
-                },
-                (_, len) => {
-                    let buf = self.reader.fill(len)?;
-
-                    if buf.as_ref().is_empty() {
-                        return Err(Error::eof(self.name, len));
-                    }
-
-                    let buf = buf.take(len);
-                    let n = buf.as_ref().len();
-
-                    self.ready = n;
-                    self.remaining -= n;
-
-                    return Ok(BytesDecodeEvent::Bytes(buf));
-                },
+    if let Some(mut len) = decode_len(name, major, reader)? {
+        // try long lifetime buffer
+        if let Reference::Long(buf) = reader.fill(len)? {
+            if buf.len() >= len {
+                reader.advance(len);
+                return Ok(Some(&buf[..len]));
             }
         }
-    }
-}
 
-impl<'de, R> Drop for BytesSequence<'de, R>
-where
-    R: Read<'de>
-{
-    #[inline]
-    fn drop(&mut self) {
-        if self.ready != 0 {
-            self.reader.advance(self.ready);
-        }
-    }
-}
+        buf.reserve(core::cmp::min(len, CAP_LIMIT)); // TODO try_reserve ?
 
-impl<'de, R> BytesSequence<'de, R>
-where
-    R: Read<'de>
-{
-    #[inline]
-    pub(crate) fn new(name: error::StaticStr, major: u8, reader: R) -> Self {
-        BytesSequence {
-            name, major, reader,
-            started: false,
-            level: 0,
-            remaining: 0,
-            ready: 0,
-            _phantom: core::marker::PhantomData
+        while len != 0 {
+            let readbuf = reader.fill(len)?;
+            let readbuf = readbuf.as_ref();
+
+            if readbuf.is_empty() {
+                return Err(Error::eof(name, len));
+            }
+
+            let readlen = core::cmp::min(readbuf.len(), len);
+
+            buf.extend_from_slice(&readbuf[..readlen]);
+            reader.advance(readlen);
+            len -= readlen;
         }
+
+        Ok(None)
+    } else {
+        // bytes sequence
+        while peek_one(name, reader)? != marker::BREAK {
+            if !reader.step_in() {
+                return Err(Error::depth_overflow(name));
+            }
+            let mut reader = ScopeGuard(reader, |reader| reader.step_out());
+            let reader = &mut *reader;
+
+            if let Some(longbuf) = decode_bytes(name, major, reader, buf)? {
+                buf.extend_from_slice(longbuf);
+            }
+        }
+
+        Ok(None)
     }
 }
 
@@ -574,17 +510,11 @@ fn decode_buf<'de, R>(name: error::StaticStr, major: u8, reader: &mut R)
 where
     R: Read<'de>,
 {
-    let mut output = Vec::new();
-    let mut seq = BytesSequence::new(name, major, reader);
-    loop {
-        match seq.next()? {
-            BytesDecodeEvent::Reserve(n) => output.try_reserve(n)
-                .map_err(|_| Error::length_overflow(name, n))?,
-            BytesDecodeEvent::Bytes(buf) => output.extend_from_slice(buf.as_ref()),
-            BytesDecodeEvent::End => break,
-        }
+    let mut buf = Vec::new();
+    if let Some(buf_ref) = decode_bytes(name, major, reader, &mut buf)? {
+        buf.extend_from_slice(buf_ref);
     }
-    Ok(output)
+    Ok(buf)
 }
 
 #[cfg(feature = "use_alloc")]
@@ -596,45 +526,19 @@ where
 {
     use crate::alloc::borrow::Cow;
 
-    let mut output = Cow::Borrowed(&[][..]);
-    let mut seq = BytesSequence::new(name, major, reader);
-    loop {
-        match seq.next()? {
-            BytesDecodeEvent::Reserve(n) => if let Cow::Owned(output) = &mut output {
-                output.try_reserve(n).map_err(|_| Error::length_overflow(name, n))?;
-            },
-            BytesDecodeEvent::Bytes(buf) => {
-                if let Reference::Long(longbuf) = buf {
-                    if output.is_empty() {
-                        output = Cow::Borrowed(longbuf);
-                        continue
-                    }
-                }
-
-                output.to_mut().extend_from_slice(buf.as_ref());
-            },
-            BytesDecodeEvent::End => break
-        }
-    }
-    Ok(output)
-}
-
-impl<'de> types::Bytes<()> {
-    /// Decode into bytes sequence.
-    #[inline]
-    pub fn decode_into<R, C>(reader: R)
-        -> BytesSequence<'de, R>
-    where
-        R: Read<'de>,
-    {
-        BytesSequence::new(&"bytes", major::BYTES, reader)
+    let mut buf = Vec::new();
+    if let Some(buf_ref) = decode_bytes(name, major, reader, &mut buf)? {
+        core::mem::forget(buf);
+        Ok(Cow::Borrowed(buf_ref))
+    } else {
+        Ok(Cow::Owned(buf))
     }
 }
 
 impl<'de> Decode<'de> for types::Bytes<&'de [u8]> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_bytes(&"bytes", major::BYTES, reader)?;
+        let buf = decode_bytes_ref(&"bytes", major::BYTES, reader)?;
         Ok(types::Bytes(buf))
     }
 }
@@ -661,7 +565,7 @@ impl<'de> Decode<'de> for &'de str {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"str";
-        let buf = decode_bytes(name, major::STRING, reader)?;
+        let buf = decode_bytes_ref(name, major::STRING, reader)?;
         core::str::from_utf8(buf).map_err(|_| Error::require_utf8(name))
     }
 }
@@ -695,22 +599,10 @@ impl<'de> Decode<'de> for crate::alloc::borrow::Cow<'de, str> {
     }
 }
 
-impl<'de> types::BadStr<()> {
-    /// Decode into string sequence (but no utf8 check).
-    #[inline]
-    pub fn decode_into<R, C>(reader: R)
-        -> BytesSequence<'de, R>
-    where
-        R: Read<'de>,
-    {
-        BytesSequence::new(&"str", major::STRING, reader)
-    }
-}
-
 impl<'de> Decode<'de> for types::BadStr<&'de [u8]> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_bytes(&"str", major::STRING, reader)?;
+        let buf = decode_bytes_ref(&"str", major::STRING, reader)?;
         Ok(types::BadStr(buf))
     }
 }
