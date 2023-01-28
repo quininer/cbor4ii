@@ -322,10 +322,10 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
     pub fn array(_name: error::StaticStr, de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
-        let array_start = dec::ArrayStart::decode(&mut de.reader)?;
+        let len = types::Array::len(&mut de.reader)?;
         Ok(Accessor {
             de,
-            len: array_start.0,
+            len,
         })
     }
 
@@ -333,15 +333,15 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
     pub fn tuple(name: error::StaticStr, de: &'a mut Deserializer<R>, len: usize)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
-        let array_start = dec::ArrayStart::decode(&mut de.reader)?;
+        let array_len = types::Array::len(&mut de.reader)?;
 
-        if array_start.0 == Some(len) {
+        if array_len == Some(len) {
             Ok(Accessor {
                 de,
-                len: array_start.0,
+                len: array_len,
             })
         } else {
-            Err(dec::Error::require_length(name, array_start.0))
+            Err(dec::Error::require_length(name, array_len))
         }
     }
 
@@ -349,10 +349,10 @@ impl<'de, 'a, R: dec::Read<'de>> Accessor<'a, R> {
     pub fn map(_name: error::StaticStr, de: &'a mut Deserializer<R>)
         -> Result<Accessor<'a, R>, dec::Error<R::Error>>
     {
-        let map_start = dec::MapStart::decode(&mut de.reader)?;
+        let len = types::Map::len(&mut de.reader)?;
         Ok(Accessor {
             de,
-            len: map_start.0,
+            len,
         })
     }
 }

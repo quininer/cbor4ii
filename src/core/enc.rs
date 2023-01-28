@@ -206,18 +206,8 @@ encode_ix!(
 impl Encode for types::Bytes<&'_ [u8]> {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        TypeNum::new(major::BYTES << 5, self.0.len() as u64).encode(writer)?;
+        types::Bytes::bounded(self.0.len(), writer)?;
         writer.push(self.0)?;
-        Ok(())
-    }
-}
-
-pub struct BytesStart;
-
-impl Encode for BytesStart {
-    #[inline]
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[(major::BYTES << 5) | marker::START])?;
         Ok(())
     }
 }
@@ -225,27 +215,17 @@ impl Encode for BytesStart {
 impl Encode for &'_ str {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        TypeNum::new(major::STRING << 5, self.len() as u64).encode(writer)?;
+        types::UncheckedStr::bounded(self.len(), writer)?;
         writer.push(self.as_bytes())?;
         Ok(())
     }
 }
 
-impl Encode for types::BadStr<&'_ [u8]> {
+impl Encode for types::UncheckedStr<&'_ [u8]> {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        TypeNum::new(major::STRING << 5, self.0.len() as u64).encode(writer)?;
+        types::UncheckedStr::bounded(self.0.len(), writer)?;
         writer.push(self.0)?;
-        Ok(())
-    }
-}
-
-pub struct StrStart;
-
-impl Encode for StrStart {
-    #[inline]
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[(major::STRING << 5) | marker::START])?;
         Ok(())
     }
 }
@@ -253,7 +233,7 @@ impl Encode for StrStart {
 impl<T: Encode> Encode for &'_ [T] {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        ArrayStartBounded(self.len()).encode(writer)?;
+        types::Array::bounded(self.len(), writer)?;
         for value in self.iter() {
             value.encode(writer)?;
         }
@@ -261,29 +241,10 @@ impl<T: Encode> Encode for &'_ [T] {
     }
 }
 
-pub struct ArrayStartBounded(pub usize);
-pub struct ArrayStartUnbounded;
-
-impl Encode for ArrayStartBounded {
-    #[inline]
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        TypeNum::new(major::ARRAY << 5, self.0 as u64).encode(writer)?;
-        Ok(())
-    }
-}
-
-impl Encode for ArrayStartUnbounded {
-    #[inline]
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[(major::ARRAY << 5) | marker::START])?;
-        Ok(())
-    }
-}
-
 impl<K: Encode, V: Encode> Encode for types::Map<&'_ [(K, V)]> {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        MapStartBounded(self.0.len()).encode(writer)?;
+        types::Map::bounded(self.0.len(), writer)?;
         for (k, v) in self.0.iter() {
             k.encode(writer)?;
             v.encode(writer)?;
@@ -292,23 +253,41 @@ impl<K: Encode, V: Encode> Encode for types::Map<&'_ [(K, V)]> {
     }
 }
 
-pub struct MapStartBounded(pub usize);
-pub struct MapStartUnbounded;
+/// Implementation of markers for types with indefinite length suppport.
+macro_rules! bound_unbound_end {
+    ( $( $t:ty , $major:expr );* $( ; )? ) => {
+        $(
+            impl $t {
+                /// Encode the type with the length prefix.
+                #[inline]
+                pub fn bounded<W: Write>(len: usize, writer: &mut W) -> Result<(), Error<W::Error>> {
+                    TypeNum::new($major << 5, len as u64).encode(writer)?;
+                    Ok(())
+                }
 
-impl Encode for MapStartBounded {
-    #[inline]
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        TypeNum::new(major::MAP << 5, self.0 as u64).encode(writer)?;
-        Ok(())
+                /// Encode the type with an indefinite size marker.
+                #[inline]
+                pub fn unbounded<W: Write>(writer: &mut W) -> Result<(), Error<W::Error>> {
+                    writer.push(&[($major << 5) | marker::START])?;
+                    Ok(())
+                }
+
+                /// Encode the indefinite size end marker.
+                #[inline]
+                pub fn end<W: Write>(writer: &mut W) -> Result<(), Error<W::Error>> {
+                    writer.push(&[marker::BREAK])?;
+                    Ok(())
+                }
+            }
+        )*
     }
 }
 
-impl Encode for MapStartUnbounded {
-    #[inline]
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[(major::MAP << 5) | marker::START])?;
-        Ok(())
-    }
+bound_unbound_end! {
+    types::Array<()>, major::ARRAY;
+    types::Map<()>, major::MAP;
+    types::Bytes<()>, major::BYTES;
+    types::UncheckedStr<()>, major::STRING;
 }
 
 impl<T: Encode> Encode for types::Tag<T> {
@@ -386,16 +365,6 @@ impl Encode for f64 {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
         let [x0, x1, x2, x3, x4, x5, x6, x7] = self.to_be_bytes();
         writer.push(&[marker::F64, x0, x1, x2, x3, x4, x5, x6, x7])?;
-        Ok(())
-    }
-}
-
-pub struct End;
-
-impl Encode for End {
-    #[inline]
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        writer.push(&[marker::BREAK])?;
         Ok(())
     }
 }
@@ -538,7 +507,7 @@ fn test_encoded() -> anyhow::Result<()> {
     // [1, [2, 3], [4, 5]]
     {
         buf.0.clear();
-        ArrayStartBounded(3).encode(&mut buf)?;
+        types::Array::bounded(3, &mut buf)?;
         1u8.encode(&mut buf)?;
         (&[2u64, 3u64][..]).encode(&mut buf)?;
         (&[4i32, 5i32][..]).encode(&mut buf)?;
@@ -549,7 +518,7 @@ fn test_encoded() -> anyhow::Result<()> {
     // {"a": 1, "b": [2, 3]}
     {
         buf.0.clear();
-        MapStartBounded(2).encode(&mut buf)?;
+        types::Map::bounded(2, &mut buf)?;
         "a".encode(&mut buf)?;
         1u32.encode(&mut buf)?;
         "b".encode(&mut buf)?;
@@ -561,9 +530,9 @@ fn test_encoded() -> anyhow::Result<()> {
     // ["a", {"b": "c"}]
     {
         buf.0.clear();
-        ArrayStartBounded(2).encode(&mut buf)?;
+        types::Array::bounded(2, &mut buf)?;
         "a".encode(&mut buf)?;
-        MapStartBounded(1).encode(&mut buf)?;
+        types::Map::bounded(1, &mut buf)?;
         "b".encode(&mut buf)?;
         "c".encode(&mut buf)?;
         let output = hex(&buf.0);
@@ -573,10 +542,10 @@ fn test_encoded() -> anyhow::Result<()> {
     // (_ h'0102', h'030405')
     {
         buf.0.clear();
-        BytesStart.encode(&mut buf)?;
+        types::Bytes::unbounded(&mut buf)?;
         types::Bytes(&[0x01, 0x02][..]).encode(&mut buf)?;
         types::Bytes(&[0x03, 0x04, 0x05][..]).encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Bytes::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x5f42010243030405ff");
     }
@@ -584,10 +553,10 @@ fn test_encoded() -> anyhow::Result<()> {
     // (_ "strea", "ming")
     {
         buf.0.clear();
-        StrStart.encode(&mut buf)?;
+        types::UncheckedStr::unbounded(&mut buf)?;
         "strea".encode(&mut buf)?;
         "ming".encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::UncheckedStr::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x7f657374726561646d696e67ff");
     }
@@ -595,8 +564,8 @@ fn test_encoded() -> anyhow::Result<()> {
     // [_ ]
     {
         buf.0.clear();
-        ArrayStartUnbounded.encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Array::unbounded(&mut buf)?;
+        types::Array::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x9fff");
     }
@@ -604,14 +573,14 @@ fn test_encoded() -> anyhow::Result<()> {
     // [_ 1, [2, 3], [_ 4, 5]]
     {
         buf.0.clear();
-        ArrayStartUnbounded.encode(&mut buf)?;
+        types::Array::unbounded(&mut buf)?;
         1u64.encode(&mut buf)?;
         (&[2u32, 3u32][..]).encode(&mut buf)?;
-        ArrayStartUnbounded.encode(&mut buf)?;
+        types::Array::unbounded(&mut buf)?;
         4u64.encode(&mut buf)?;
         5u64.encode(&mut buf)?;
-        End.encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Array::end(&mut buf)?;
+        types::Array::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x9f018202039f0405ffff");
     }
@@ -619,11 +588,11 @@ fn test_encoded() -> anyhow::Result<()> {
     // [_ 1, [2, 3], [4, 5]]
     {
         buf.0.clear();
-        ArrayStartUnbounded.encode(&mut buf)?;
+        types::Array::unbounded(&mut buf)?;
         1u64.encode(&mut buf)?;
         (&[2u32, 3u32][..]).encode(&mut buf)?;
         (&[4u32, 5u32][..]).encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Array::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x9f01820203820405ff");
     }
@@ -631,13 +600,13 @@ fn test_encoded() -> anyhow::Result<()> {
     // [1, [2, 3], [_ 4, 5]]
     {
         buf.0.clear();
-        ArrayStartBounded(3).encode(&mut buf)?;
+        types::Array::bounded(3, &mut buf)?;
         1u64.encode(&mut buf)?;
         (&[2u32, 3u32][..]).encode(&mut buf)?;
-        ArrayStartUnbounded.encode(&mut buf)?;
+        types::Array::unbounded(&mut buf)?;
         4u64.encode(&mut buf)?;
         5u64.encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Array::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x83018202039f0405ff");
     }
@@ -645,12 +614,12 @@ fn test_encoded() -> anyhow::Result<()> {
     // [1, [_ 2, 3], [4, 5]]
     {
         buf.0.clear();
-        ArrayStartBounded(3).encode(&mut buf)?;
+        types::Array::bounded(3, &mut buf)?;
         1u64.encode(&mut buf)?;
-        ArrayStartUnbounded.encode(&mut buf)?;
+        types::Array::unbounded(&mut buf)?;
         2u64.encode(&mut buf)?;
         3u64.encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Array::end(&mut buf)?;
         (&[4u32, 5u32][..]).encode(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x83019f0203ff820405");
@@ -659,11 +628,11 @@ fn test_encoded() -> anyhow::Result<()> {
     // [_ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
     {
         buf.0.clear();
-        ArrayStartUnbounded.encode(&mut buf)?;
+        types::Array::unbounded(&mut buf)?;
         for i in 1u32..=25 {
             i.encode(&mut buf)?;
         }
-        End.encode(&mut buf)?;
+        types::Array::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
     }
@@ -671,15 +640,15 @@ fn test_encoded() -> anyhow::Result<()> {
     // {_ "a": 1, "b": [_ 2, 3]}
     {
         buf.0.clear();
-        MapStartUnbounded.encode(&mut buf)?;
+        types::Map::unbounded(&mut buf)?;
         "a".encode(&mut buf)?;
         1u32.encode(&mut buf)?;
         "b".encode(&mut buf)?;
-        ArrayStartUnbounded.encode(&mut buf)?;
+        types::Array::unbounded(&mut buf)?;
         2i32.encode(&mut buf)?;
         3i32.encode(&mut buf)?;
-        End.encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Array::end(&mut buf)?;
+        types::Array::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0xbf61610161629f0203ffff");
     }
@@ -687,12 +656,12 @@ fn test_encoded() -> anyhow::Result<()> {
     // ["a", {_ "b": "c"}]
     {
         buf.0.clear();
-        ArrayStartBounded(2).encode(&mut buf)?;
+        types::Array::bounded(2, &mut buf)?;
         "a".encode(&mut buf)?;
-        MapStartUnbounded.encode(&mut buf)?;
+        types::Map::unbounded(&mut buf)?;
         "b".encode(&mut buf)?;
         "c".encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Array::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0x826161bf61626163ff");
     }
@@ -700,12 +669,12 @@ fn test_encoded() -> anyhow::Result<()> {
     // {_ "Fun": true, "Amt": -2}
     {
         buf.0.clear();
-        MapStartUnbounded.encode(&mut buf)?;
+        types::Map::unbounded(&mut buf)?;
         "Fun".encode(&mut buf)?;
         true.encode(&mut buf)?;
         "Amt".encode(&mut buf)?;
         (-2i32).encode(&mut buf)?;
-        End.encode(&mut buf)?;
+        types::Map::end(&mut buf)?;
         let output = hex(&buf.0);
         assert_eq!(output, "0xbf6346756ef563416d7421ff");
     }
