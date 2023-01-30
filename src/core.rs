@@ -4,7 +4,7 @@ pub mod error;
 pub mod types;
 pub mod enc;
 pub mod dec;
-// pub mod raw_value;
+pub mod raw_value;
 pub mod utils;
 
 #[cfg(feature = "use_alloc")]
