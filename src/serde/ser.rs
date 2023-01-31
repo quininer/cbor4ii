@@ -271,19 +271,7 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     where
         T: fmt::Display,
     {
-        use core::fmt::Write;
-        use serde::ser::Error;
-
-        let mut writer = FmtWriter::new(&mut self.writer);
-
-        if let Err(err) = write!(&mut writer, "{}", value) {
-            if !writer.is_error() {
-                return Err(EncodeError::custom(err));
-            }
-        }
-
-        writer.flush()?;
-        Ok(())
+        collect_str(&mut self.writer, &value)
     }
 
     #[inline]
@@ -435,6 +423,24 @@ impl<W: enc::Write> serde::ser::SerializeStructVariant for BoundedCollect<'_, W>
     fn end(self) -> Result<Self::Ok, Self::Error> {
         Ok(())
     }
+}
+
+fn collect_str<W: enc::Write>(writer: &mut W, value: &dyn fmt::Display)
+    -> Result<(), EncodeError<W::Error>>
+{
+    use core::fmt::Write;
+    use serde::ser::Error;
+
+    let mut writer = FmtWriter::new(writer);
+
+    if let Err(err) = write!(&mut writer, "{}", value) {
+        if !writer.is_error() {
+            return Err(EncodeError::custom(err));
+        }
+    }
+
+    writer.flush()?;
+    Ok(())
 }
 
 struct FmtWriter<'a, W: enc::Write> {
