@@ -32,7 +32,12 @@ where R: dec::Read<'de>
 
     #[inline]
     fn fill<'short>(&'short mut self, want: usize) -> Result<dec::Reference<'de, 'short>, Self::Error> {
-        let buf = match self.reader.fill(self.readn + want)? {
+        let want = match self.readn.checked_add(want) {
+            Some(n) => n,
+            None => return Ok(dec::Reference::Long(&[]))
+        };
+
+        let buf = match self.reader.fill(want)? {
             dec::Reference::Long(buf)
                 if buf.len() >= self.readn => dec::Reference::Long(&buf[self.readn..]),
             dec::Reference::Long(_) => dec::Reference::Long(&[]),

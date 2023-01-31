@@ -1,14 +1,17 @@
 //! core module
 
+mod raw_value;
+
 pub mod error;
 pub mod types;
 pub mod enc;
 pub mod dec;
-pub mod raw_value;
 pub mod utils;
 
 #[cfg(feature = "use_alloc")]
 use crate::alloc::{ vec::Vec, boxed::Box, string::String };
+
+pub use raw_value::RawValue;
 
 
 /// Major type
