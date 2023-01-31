@@ -181,7 +181,8 @@ fn test_serde_cow() {
         }
     }
 
-    pub fn short_from_slice<'a, T>(buf: &'a [u8]) -> Result<T, dec::Error<Infallible>>
+    pub fn short_from_slice<'a, T>(buf: &'a [u8])
+        -> Result<T, cbor4ii::serde::DecodeError<Infallible>>
     where
         T: serde::Deserialize<'a>,
     {
@@ -375,7 +376,7 @@ fn test_serde_format_args() {
         let mut writer = BadWriter;
         let err = cbor4ii::serde::to_writer(&mut writer, &args).unwrap_err();
         let err = match err {
-            cbor4ii::EncodeError::Write(err) => err,
+            cbor4ii::serde::EncodeError::Core(cbor4ii::core::error::EncodeError::Write(err)) => err,
             _ => panic!()
         };
         assert_eq!(err.kind(), io::ErrorKind::Other);

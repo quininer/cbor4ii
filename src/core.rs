@@ -1,5 +1,8 @@
 //! core module
 
+mod raw_value;
+
+pub mod error;
 pub mod types;
 pub mod enc;
 pub mod dec;
@@ -7,6 +10,8 @@ pub mod utils;
 
 #[cfg(feature = "use_alloc")]
 use crate::alloc::{ vec::Vec, boxed::Box, string::String };
+
+pub use raw_value::RawValue;
 
 
 /// Major type
@@ -68,54 +73,68 @@ impl enc::Encode for Value {
 
 #[cfg(feature = "use_alloc")]
 impl<'de> dec::Decode<'de> for Value {
-    fn decode_with<R: dec::Read<'de>>(byte: u8, reader: &mut R) -> Result<Self, dec::Error<R::Error>> {
+    fn decode<R: dec::Read<'de>>(reader: &mut R) -> Result<Self, dec::Error<R::Error>> {
         use crate::util::ScopeGuard;
 
+        let name = &"value";
+
         if !reader.step_in() {
-            return Err(dec::Error::DepthLimit);
+            return Err(dec::Error::depth_overflow(name));
         }
 
         let mut reader = ScopeGuard(reader, |reader| reader.step_out());
         let reader = &mut *reader;
 
-        match byte >> 5 {
-            major::UNSIGNED => u64::decode_with(byte, reader)
+        let byte = dec::peek_one(name, reader)?;
+
+        match dec::if_major(byte) {
+            major::UNSIGNED => u64::decode(reader)
                 .map(|i| Value::Integer(i.into())),
             major::NEGATIVE => {
-                let types::Negative(v) = <types::Negative<u64>>::decode_with(byte, reader)?;
+                let types::Negative(v) = <types::Negative<u64>>::decode(reader)?;
                 let v = i128::from(v);
-                let v = v.checked_add(1)
-                    .ok_or(dec::Error::Overflow { name: "Value::Integer" })?;
-                Ok(Value::Integer(-v))
+                let v = -v;
+                let v = v.checked_sub(1)
+                    .ok_or_else(|| dec::Error::arithmetic_overflow(name, error::ArithmeticOverflow::Underflow))?;
+                Ok(Value::Integer(v))
             },
-            major::BYTES => <types::Bytes<Vec<u8>>>::decode_with(byte, reader)
+            major::BYTES => <types::Bytes<Vec<u8>>>::decode(reader)
                 .map(|buf| Value::Bytes(buf.0)),
-            major::STRING => String::decode_with(byte, reader)
+            major::STRING => String::decode(reader)
                 .map(Value::Text),
-            major::ARRAY => <Vec<Value>>::decode_with(byte, reader)
+            major::ARRAY => <Vec<Value>>::decode(reader)
                 .map(Value::Array),
-            major::MAP => <types::Map<Vec<(Value, Value)>>>::decode_with(byte, reader)
+            major::MAP => <types::Map<Vec<(Value, Value)>>>::decode(reader)
                 .map(|map| Value::Map(map.0)),
             major::TAG => {
-                let tag = <types::Tag<Value>>::decode_with(byte, reader)?;
+                let tag = <types::Tag<Value>>::decode(reader)?;
                 Ok(Value::Tag(tag.0, Box::new(tag.1)))
             },
             major::SIMPLE => match byte {
-                marker::FALSE => Ok(Value::Bool(false)),
-                marker::TRUE => Ok(Value::Bool(true)),
-                marker::NULL | marker::UNDEFINED => Ok(Value::Null),
+                marker::FALSE => {
+                    reader.advance(1);
+                    Ok(Value::Bool(false))
+                },
+                marker::TRUE => {
+                    reader.advance(1);
+                    Ok(Value::Bool(true))
+                },
+                marker::NULL | marker::UNDEFINED => {
+                    reader.advance(1);
+                    Ok(Value::Null)
+                },
                 #[cfg(feature = "half-f16")]
                 marker::F16 => {
-                    let v = half::f16::decode_with(byte, reader)?;
+                    let v = half::f16::decode(reader)?;
                     Ok(Value::Float(v.into()))
                 },
-                marker::F32 => f32::decode_with(byte, reader)
+                marker::F32 => f32::decode(reader)
                     .map(|v| Value::Float(v.into())),
-                marker::F64 => f64::decode_with(byte, reader)
+                marker::F64 => f64::decode(reader)
                     .map(Value::Float),
-                _ => Err(dec::Error::Unsupported { byte })
+                _ => Err(dec::Error::unsupported(name, byte))
             },
-            _ => Err(dec::Error::Unsupported { byte })
+            _ => Err(dec::Error::unsupported(name, byte))
         }
     }
 }

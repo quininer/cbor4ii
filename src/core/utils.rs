@@ -56,7 +56,7 @@ impl SliceReader<'_> {
 }
 
 impl<'de> dec::Read<'de> for SliceReader<'de> {
-    type Error = core::convert::Infallible;
+    type Error = crate::core::error::Never;
 
     #[inline]
     fn fill<'b>(&'b mut self, want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {

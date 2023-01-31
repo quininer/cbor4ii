@@ -5,6 +5,7 @@ use anyhow::Context;
 use cbor4ii::core::Value;
 use cbor4ii::core::enc::{ self, Encode };
 use cbor4ii::core::dec::{ self, Decode };
+use cbor4ii::core::types;
 use cbor4ii::core::utils::{ BufWriter, SliceReader };
 
 #[test]
@@ -33,11 +34,11 @@ fn test_decode_value() {
 #[test]
 fn test_decode_buf_segment() -> anyhow::Result<()> {
     let mut writer = BufWriter::new(Vec::new());
-    enc::StrStart.encode(&mut writer)?;
+    types::UncheckedStr::unbounded(&mut writer)?;
     "test".encode(&mut writer)?;
     "test2".encode(&mut writer)?;
     "test3".encode(&mut writer)?;
-    enc::End.encode(&mut writer)?;
+    types::UncheckedStr::end(&mut writer)?;
 
     let mut reader = SliceReader::new(writer.buffer());
     let output = String::decode(&mut reader)?;
@@ -84,7 +85,7 @@ fn test_decode_array_map() -> anyhow::Result<()> {
     (&[0u32, 1, 2, 3, 4, 5][..]).encode(&mut writer)?;
 
     let mut reader = SliceReader::new(writer.buffer());
-    let dec::ArrayStart(len) = dec::ArrayStart::decode(&mut reader)?;
+    let len = types::Array::len(&mut reader)?;
     let len = len.context("expect len")?;
     for i in 0..len {
         let n = u64::decode(&mut reader)?;
@@ -93,14 +94,14 @@ fn test_decode_array_map() -> anyhow::Result<()> {
 
     // map unbounded
     let mut writer = BufWriter::new(Vec::new());
-    enc::MapStartUnbounded.encode(&mut writer)?;
+    types::Map::unbounded(&mut writer)?;
     for i in 0u64..6 {
         i.encode(&mut writer)?;
     }
-    enc::End.encode(&mut writer)?;
+    types::Map::end(&mut writer)?;
 
     let mut reader = SliceReader::new(writer.buffer());
-    let dec::MapStart(len) = dec::MapStart::decode(&mut reader)?;
+    let len = types::Map::len(&mut reader)?;
     assert_eq!(len, None);
     let mut count = 0u64;
     while !dec::is_break(&mut reader)? {
@@ -250,25 +251,24 @@ fn test_max_neg_8_as_i16() {
 }
 
 #[test]
-fn test_tag_start() {
+fn test_tag() {
     let mut reader_tag_len1 = SliceReader::new(&[0xd8, 0x2a]);
-    let tag_len1 = dec::TagStart::decode(&mut reader_tag_len1).unwrap();
-    assert_eq!(tag_len1.0, 42);
+    let tag_len1 = types::Tag::tag(&mut reader_tag_len1).unwrap();
+    assert_eq!(tag_len1, 42);
 
     let mut reader_tag_len2 = SliceReader::new(&[0xd9, 0x00, 0x2a]);
-    let tag_len2 = dec::TagStart::decode(&mut reader_tag_len2).unwrap();
-    assert_eq!(tag_len2.0, 42);
+    let tag_len2 = types::Tag::tag(&mut reader_tag_len2).unwrap();
+    assert_eq!(tag_len2, 42);
 
     let mut reader_tag_len4 = SliceReader::new(&[0xda, 0x00, 0x00, 0x00, 0x2a]);
-    let tag_len4 = dec::TagStart::decode(&mut reader_tag_len4).unwrap();
-    assert_eq!(tag_len4.0, 42);
+    let tag_len4 = types::Tag::tag(&mut reader_tag_len4).unwrap();
+    assert_eq!(tag_len4, 42);
 
     let mut reader_tag_len8 = SliceReader::new(
         &[0xdb, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2a]);
-    let tag_len8 = dec::TagStart::decode(&mut reader_tag_len8).unwrap();
-    assert_eq!(tag_len8.0, 42);
+    let tag_len8 = types::Tag::tag(&mut reader_tag_len8).unwrap();
+    assert_eq!(tag_len8, 42);
 }
-
 
 #[test]
 fn test_ignored_any_eof_loop() {
@@ -283,7 +283,9 @@ fn test_ignored_any_eof_loop() {
     let ret = dec::IgnoredAny::decode(&mut reader);
 
     match ret {
-        Err(dec::Error::Eof) => (),
+        Err(dec::Error::Eof { name, .. }) => {
+            assert_eq!(name, &"ignored-any");
+        },
         _ => panic!()
     }
 }
