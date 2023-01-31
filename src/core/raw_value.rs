@@ -85,3 +85,58 @@ impl<'de> enc::Encode for RawValue<'de> {
         writer.push(self.0).map_err(enc::Error::Write)
     }
 }
+
+#[test]
+#[cfg(feature = "use_std")]
+fn test_raw_value() {
+    use crate::core::enc::Encode;
+    use crate::core::dec::Decode;
+    use crate::core::utils::{ BufWriter, SliceReader };
+    use crate::core::types;
+
+    let buf = {
+        let mut buf = BufWriter::new(Vec::new());
+
+        types::Map(&[
+            ("bar", types::Map(&[
+                ("value", 0x99u32)
+            ][..]))
+        ][..]).encode(&mut buf).unwrap();
+
+        buf
+    };
+
+    let mut reader = SliceReader::new(buf.buffer());
+    let map = <types::Map<Vec<(&str, RawValue<'_>)>>>::decode(&mut reader).unwrap();
+
+    assert_eq!(map.0.len(), 1);
+    assert_eq!(map.0[0].0, "bar");
+
+    let bar_raw_value = &map.0[0].1;
+
+    let buf2 = {
+        let mut buf = BufWriter::new(Vec::new());
+
+        types::Map(&[
+            ("bar", bar_raw_value)
+        ][..]).encode(&mut buf).unwrap();
+
+        buf
+    };
+
+    assert_eq!(buf.buffer(), buf2.buffer());
+
+    type Bar<'a> = types::Map<Vec<(&'a str, u32)>>;
+
+    let mut reader = SliceReader::new(buf2.buffer());
+    let map2 = <types::Map<Vec<(&str, Bar)>>>::decode(&mut reader).unwrap();
+
+    assert_eq!(map2.0.len(), 1);
+    assert_eq!(map2.0[0].0, "bar");
+
+    let bar = &map2.0[0].1;
+
+    assert_eq!(bar.0.len(), 1);
+    assert_eq!(bar.0[0].0, "value");
+    assert_eq!(bar.0[0].1, 0x99);
+}
