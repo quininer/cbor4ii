@@ -40,7 +40,7 @@ pub(crate) mod marker {
 
 
 #[cfg(feature = "use_alloc")]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum Value {
     Null,
