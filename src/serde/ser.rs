@@ -472,26 +472,35 @@ impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
         }
 
         match self.state {
-            State::Short => {
-                if self.buf.len() - self.pos >= input.len() {
-                    self.buf[self.pos..][..input.len()]
-                        .copy_from_slice(input.as_bytes());
-                    self.pos += input.len();
-                } else {
-                    self.state = State::Segment;
-                    try_!(types::UncheckedStr::unbounded(self.inner));
-                    try_!(types::UncheckedStr(&self.buf[..self.pos]).encode(self.inner));
-                    try_!(input.encode(self.inner));
-                }
-
-                Ok(())
+            State::Short => if self.pos + input.len() > self.buf.len() {
+                self.state = State::Segment;
+                try_!(types::UncheckedStr::unbounded(self.inner));
             },
-            State::Segment => {
-                try_!(input.encode(self.inner));
-                Ok(())
-            },
-            State::Error(_) => Err(fmt::Error)
+            State::Segment => (),
+            State::Error(_) => return Err(fmt::Error)
         }
+
+        loop {
+            if let Some(buf) = self.buf.get_mut(self.pos..)
+                .and_then(|buf| buf.get_mut(..input.len()))
+            {
+                buf.copy_from_slice(input.as_bytes());
+                self.pos += input.len();
+                break
+            }
+
+            if self.pos > 0 {
+                try_!(types::UncheckedStr(&self.buf[..self.pos]).encode(self.inner));
+                self.pos = 0;
+            }
+
+            if input.len() > self.buf.len() {
+                try_!(input.encode(self.inner));
+                break
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -513,9 +522,18 @@ impl<W: enc::Write> FmtWriter<'_, W> {
     #[inline]
     fn flush(self) -> Result<(), enc::Error<W::Error>> {
         match self.state {
-            State::Short => types::UncheckedStr(&self.buf[..self.pos]).encode(self.inner),
-            State::Segment => types::UncheckedStr::end(self.inner),
-            State::Error(err) => Err(err)
+            State::Short | State::Segment => {
+                if matches!(self.state, State::Short) || self.pos != 0 {
+                    types::UncheckedStr(&self.buf[..self.pos]).encode(self.inner)?;
+                }
+
+                if matches!(self.state, State::Segment) {
+                    types::UncheckedStr::end(self.inner)?;
+                }
+
+                Ok(())
+            },
+            State::Error(err) => Err(err),
         }
     }
 }

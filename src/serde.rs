@@ -13,7 +13,7 @@ mod io_writer {
     use crate::serde::ser;
 
     /// Serializes a value to a writer.
-    pub fn to_writer<W, T>(writer: &mut W, value: &T)
+    pub fn to_writer<W, T>(writer: W, value: &T)
         -> Result<(), EncodeError<io::Error>>
     where
         W: io::Write,
