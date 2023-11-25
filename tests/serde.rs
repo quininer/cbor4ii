@@ -481,7 +481,7 @@ fn test_regression_min_i64() {
 }
 
 #[test]
-fn test_debug_ser_len() {
+fn test_display_ser_len() {
     struct Test {
         long: char,
         short: char

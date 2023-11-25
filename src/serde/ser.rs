@@ -446,7 +446,7 @@ fn collect_str<W: enc::Write>(writer: &mut W, value: &dyn fmt::Display)
 struct FmtWriter<'a, W: enc::Write> {
     inner: &'a mut W,
     buf: [u8; 256],
-    pos: usize,
+    pos: u8,
     state: State<enc::Error<W::Error>>,
 }
 
@@ -471,8 +471,10 @@ impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
             }
         }
 
+        debug_assert!(usize::from(u8::MAX) >= self.buf.len());
+
         match self.state {
-            State::Short => if self.pos + input.len() > self.buf.len() {
+            State::Short => if usize::from(self.pos) + input.len() > self.buf.len() {
                 self.state = State::Segment;
                 try_!(types::UncheckedStr::unbounded(self.inner));
             },
@@ -481,16 +483,19 @@ impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
         }
 
         loop {
-            if let Some(buf) = self.buf.get_mut(self.pos..)
+            if let Some(buf) = self.buf.get_mut(self.pos.into()..)
                 .and_then(|buf| buf.get_mut(..input.len()))
             {
+                use core::convert::TryInto;
+
                 buf.copy_from_slice(input.as_bytes());
-                self.pos += input.len();
+                let len: u8 = input.len().try_into().unwrap(); // checked by if
+                self.pos += len;
                 break
             }
 
             if self.pos > 0 {
-                try_!(types::UncheckedStr(&self.buf[..self.pos]).encode(self.inner));
+                try_!(types::UncheckedStr(&self.buf[..self.pos.into()]).encode(self.inner));
                 self.pos = 0;
             }
 
@@ -505,6 +510,7 @@ impl<W: enc::Write> fmt::Write for FmtWriter<'_, W> {
 }
 
 impl<W: enc::Write> FmtWriter<'_, W> {
+    #[inline]
     fn new(inner: &mut W) -> FmtWriter<'_, W> {
         FmtWriter {
             inner,
@@ -524,7 +530,7 @@ impl<W: enc::Write> FmtWriter<'_, W> {
         match self.state {
             State::Short | State::Segment => {
                 if matches!(self.state, State::Short) || self.pos != 0 {
-                    types::UncheckedStr(&self.buf[..self.pos]).encode(self.inner)?;
+                    types::UncheckedStr(&self.buf[..self.pos.into()]).encode(self.inner)?;
                 }
 
                 if matches!(self.state, State::Segment) {
