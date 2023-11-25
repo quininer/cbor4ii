@@ -479,3 +479,42 @@ fn test_regression_min_i64() {
     let min_i64: i64 = from_slice(&buf).unwrap();
     assert_eq!(min_i64, i64::MIN);
 }
+
+#[test]
+fn test_debug_ser_len() {
+    struct Test {
+        long: char,
+        short: char
+    }
+
+    impl fmt::Display for Test {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            let s = (0..257).map(|_| self.long).collect::<String>();
+            write!(f, "{}", s)?;
+
+            for _ in 0..257 {
+                write!(f, "{}", self.short)?;
+            }
+
+            Ok(())
+        }
+    }
+
+    impl Serialize for Test {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.collect_str(self)
+        }
+    }
+
+    let test = Test {
+        long: 'l',
+        short: 's'
+    };
+
+    let buf = to_vec(Vec::new(), &test).unwrap();
+    assert!(dbg!(buf.len()) < 777); // <= 0.3.1
+    assert!(dbg!(buf.len()) <= 523);
+}
