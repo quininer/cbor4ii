@@ -445,7 +445,7 @@ fn collect_str<W: enc::Write>(writer: &mut W, value: &dyn fmt::Display)
 
 struct FmtWriter<'a, W: enc::Write> {
     inner: &'a mut W,
-    buf: [u8; 256],
+    buf: [u8; 255],
     pos: u8,
     state: State<enc::Error<W::Error>>,
 }
@@ -514,7 +514,7 @@ impl<W: enc::Write> FmtWriter<'_, W> {
     fn new(inner: &mut W) -> FmtWriter<'_, W> {
         FmtWriter {
             inner,
-            buf: [0; 256],
+            buf: [0; 255],
             pos: 0,
             state: State::Short,
         }
