@@ -291,12 +291,61 @@ fn test_ignored_any_eof_loop() {
 }
 
 #[test]
-fn test_cov_u16() {
+fn test_cov_case() {
     let mut buf = BufWriter::new(Vec::new());
+
+    // u16
     u16::MAX.encode(&mut buf).unwrap();
-
-    let mut reader = SliceReader::new(buf.buffer());
-    let v = u16::decode(&mut reader).unwrap();
-
+    let v = u16::decode(&mut SliceReader::new(buf.buffer())).unwrap();
     assert_eq!(v, u16::MAX);
+
+    // i128
+    buf.clear();
+    i128::MAX.encode(&mut buf).unwrap();
+    let v = i128::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v, i128::MAX);
+
+    // bytes
+    buf.clear();
+    types::Bytes("123".as_bytes()).encode(&mut buf).unwrap();
+    let v = <types::Bytes<&[u8]>>::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v.0, b"123");
+
+    // unchecked str
+    buf.clear();
+    types::UncheckedStr(&[0xff][..]).encode(&mut buf).unwrap();
+    let v = <types::UncheckedStr<&[u8]>>::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v.0, &[0xff]);
+
+    // unbounded + bool + ignore
+    buf.clear();
+    <types::Array<()>>::unbounded(&mut buf).unwrap();
+    true.encode(&mut buf).unwrap();
+    false.encode(&mut buf).unwrap();
+    <types::Array<()>>::end(&mut buf).unwrap();
+    let v = <Vec<bool>>::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v, vec![true, false]);
+    let _ignore = dec::IgnoredAny::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+
+    // option + f32
+    buf.clear();
+    f32::MAX.encode(&mut buf).unwrap();
+    let v = <Option<f32>>::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v, Some(f32::MAX));
+    buf.clear();
+    types::Null.encode(&mut buf).unwrap();
+    let v = <Option<f32>>::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v, None);
+    buf.clear();
+    types::Undefined.encode(&mut buf).unwrap();
+    let v = <Option<f32>>::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v, None);
+
+    // simple
+    buf.clear();
+    types::Simple(21).encode(&mut buf).unwrap();
+    let v = types::Simple::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v.0, 21);
+    let v = bool::decode(&mut SliceReader::new(buf.buffer())).unwrap();
+    assert_eq!(v, true);
 }
