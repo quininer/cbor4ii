@@ -90,7 +90,6 @@ impl<'de, 'a, R: dec::Read<'de>> serde::Deserializer<'de> for &'a mut Deserializ
                 },
                 #[cfg(feature = "half-f16")]
                 marker::F16 => {
-                    de.reader.advance(1);
                     let v = half::f16::decode(&mut de.reader)?;
                     visitor.visit_f32(v.into())
                 },
