@@ -15,16 +15,14 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
-
-      - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-
-      - name: Check
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup update stable
+      - name: Check minimum
+        run: cargo check --all
+      - name: Check serde + use_alloc
+        run: cargo check --all --features serde1,use_alloc
+      - name: Check all
         run: cargo check --all --all-features --all-targets
 
   test:
@@ -34,15 +32,17 @@ jobs:
       RUSTFLAGS: "-D warnings"
 
     steps:
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: nightly
-        override: true
-    - uses: actions/checkout@master
-    - name: minimum feature
-      run: cargo test --all
+    - name: Checkout sources
+      uses: actions/checkout@v4
+    - name: Install Rust
+      run: rustup update stable
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@cargo-llvm-cov
     - name: all feature
-      run: cargo test --all --all-features
-    - name: serde + use_alloc
-      run: cargo test --all --features serde1,use_alloc
+      run: cargo llvm-cov --all --all-features --lcov --output-path lcov.info
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: lcov.info
+        fail_ci_if_error: true
