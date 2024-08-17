@@ -38,8 +38,8 @@ jobs:
       run: rustup update stable
     - name: Install cargo-llvm-cov
       uses: taiki-e/install-action@cargo-llvm-cov
-    - name: all feature
-      run: cargo llvm-cov --all --all-features --lcov --output-path lcov.info
+    - name: Test all
+      run: cargo llvm-cov test --all --all-features --lcov --output-path lcov.info
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:

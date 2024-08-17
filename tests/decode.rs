@@ -289,3 +289,14 @@ fn test_ignored_any_eof_loop() {
         _ => panic!()
     }
 }
+
+#[test]
+fn test_cov_u16() {
+    let mut buf = BufWriter::new(Vec::new());
+    u16::MAX.encode(&mut buf).unwrap();
+
+    let mut reader = SliceReader::new(buf.buffer());
+    let v = u16::decode(&mut reader).unwrap();
+
+    assert_eq!(v, u16::MAX);
+}
