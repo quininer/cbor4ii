@@ -518,3 +518,20 @@ fn test_display_ser_len() {
     assert!(dbg!(buf.len()) < 777); // <= 0.3.1
     assert!(dbg!(buf.len()) <= 523);
 }
+
+#[cfg(feature = "half-f16")]
+#[test]
+fn test_regression_f16() {
+    use cbor4ii::core::Value;
+    use cbor4ii::core::enc::Encode;
+    use cbor4ii::core::utils::BufWriter;
+
+    let mut buf = BufWriter::new(Vec::new());
+    half::f16::from_f32(12.).encode(&mut buf).unwrap();
+    let value: Value = from_slice(buf.buffer()).unwrap();
+
+    match value {
+        Value::Float(v) => assert_eq!(v, 12.),
+        _ => panic!()
+    }
+}
