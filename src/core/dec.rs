@@ -15,11 +15,7 @@ use crate::alloc::{ vec::Vec, string::String };
 /// but can define its own error types, and can get a
 /// reference with a long enough lifetime to implement zero-copy decode.
 pub trait Read<'de> {
-    #[cfg(feature = "use_std")]
-    type Error: std::error::Error + 'static;
-
-    #[cfg(not(feature = "use_std"))]
-    type Error: core::fmt::Display + core::fmt::Debug;
+    type Error: core::error::Error + 'static;
 
     /// Returns the available bytes.
     ///
@@ -86,7 +82,7 @@ impl<'de, 'short> Reference<'de, 'short> {
     }
 }
 
-impl<'a, 'de, T: Read<'de>> Read<'de> for &'a mut T {
+impl<'de, T: Read<'de>> Read<'de> for &mut T {
     type Error = T::Error;
 
     #[inline]
@@ -116,7 +112,7 @@ pub(crate) fn peek_one<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R
 {
     let b = reader.fill(1)?
         .as_ref()
-        .get(0)
+        .first()
         .copied()
         .ok_or_else(|| Error::eof(name, 1))?;
     Ok(b)
