@@ -1,6 +1,6 @@
 [package]
 name = "cbor4ii"
-version = "0.3.3"
+version = "1.0.0"
 authors = ["quininer <quininer@live.com>"]
 description = "CBOR: Concise Binary Object Representation"
 repository = "https://github.com/quininer/cbor4ii"
@@ -10,7 +10,7 @@ license = "MIT"
 edition = "2018"
 
 [features]
-use_std = [ "serde/std", "use_alloc" ]
+use_std = [ "use_alloc" ]
 use_alloc = []
 half-f16 = [ "half" ]
 serde1 = [ "serde", "use_alloc" ]
@@ -35,8 +35,10 @@ all-features = true
 name = "ser"
 path = "benches/bench_ser.rs"
 harness = false
+required-features = [ "serde1", "use_std" ]
 
 [[bench]]
 name = "de"
 path = "benches/bench_de.rs"
 harness = false
+required-features = [ "serde1" ]

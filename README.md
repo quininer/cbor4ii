@@ -24,11 +24,11 @@ This library is intended to be compatible with `serde_cbor`,
 but will not follow some unreasonable designs of `serde_cbor`.
 
 * `cbor4ii` will express the unit type as an empty array instead of null.
-This avoids the problem that `serde_cbor` cannot distinguish between `None` and `Some(())`.
-see <https://github.com/pyfisch/cbor/issues/185>
+  This avoids the problem that `serde_cbor` cannot distinguish between `None` and `Some(())`.
+  see <https://github.com/pyfisch/cbor/issues/185>
 * `cbor4ii` does not support packed mode, and it may be implemented in future,
-but it may not be compatible with `serde_cbor`.
-If you want packed mode, you should look at `bincode`.
+  but it may not be compatible with `serde_cbor`.
+  If you want packed mode, you should look at `bincode`.
 
 ## Performance
 

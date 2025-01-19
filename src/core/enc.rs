@@ -10,11 +10,7 @@ pub use crate::core::error::EncodeError as Error;
 /// This is similar to `Write` of standard library,
 /// but it can define its own error type and work in `no_std`.
 pub trait Write {
-    #[cfg(feature = "use_std")]
-    type Error: std::error::Error + 'static;
-
-    #[cfg(not(feature = "use_std"))]
-    type Error: core::fmt::Display + core::fmt::Debug;
+    type Error: core::error::Error + 'static;
 
     /// write all data
     fn push(&mut self, input: &[u8]) -> Result<(), Self::Error>;
@@ -33,7 +29,7 @@ impl<T: Encode> Encode for &'_ T {
     }
 }
 
-impl<'a, T: Write> Write for &'a mut T {
+impl<T: Write> Write for &mut T {
     type Error = T::Error;
 
     #[inline]

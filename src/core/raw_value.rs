@@ -25,7 +25,7 @@ where R: dec::Read<'de>
     }
 }
 
-impl<'r, 'de, R> dec::Read<'de> for RawValueReader<'r, 'de, R>
+impl<'de, R> dec::Read<'de> for RawValueReader<'_, 'de, R>
 where R: dec::Read<'de>
 {
     type Error = R::Error;
@@ -84,7 +84,7 @@ impl<'de> dec::Decode<'de> for RawValue<'de> {
     }
 }
 
-impl<'de> enc::Encode for RawValue<'de> {
+impl enc::Encode for RawValue<'_> {
     #[inline]
     fn encode<W: enc::Write>(&self, writer: &mut W) -> Result<(), enc::Error<W::Error>> {
         writer.push(self.0).map_err(enc::Error::Write)
