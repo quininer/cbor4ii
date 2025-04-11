@@ -13,7 +13,7 @@ edition = "2018"
 use_std = [ "use_alloc" ]
 use_alloc = []
 half-f16 = [ "half" ]
-serde1 = [ "serde", "use_alloc" ]
+serde1 = [ "serde/alloc", "use_alloc" ]
 
 [dependencies]
 half = { version = "2", default-features = false, optional = true }
