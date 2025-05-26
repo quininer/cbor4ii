@@ -404,8 +404,7 @@ impl<'de> Decode<'de> for i128 {
                         let buf = decode_x128(name_nbytes, reader)?;
                         let n = u128::from_be_bytes(buf);
                         let n = i128::try_from(n).map_err(|_| Error::cast_overflow(name))?;
-                        let n = n.checked_neg()
-                            .ok_or_else(|| Error::arithmetic_overflow(name, error::ArithmeticOverflow::Underflow))?;
+                        let n = -n;
                         let n = n.checked_sub(1)
                             .ok_or_else(|| Error::arithmetic_overflow(name, error::ArithmeticOverflow::Underflow))?;
                         Ok(n)
