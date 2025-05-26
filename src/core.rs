@@ -93,9 +93,7 @@ impl<'de> dec::Decode<'de> for Value {
             major::NEGATIVE => {
                 let types::Negative(v) = <types::Negative<u64>>::decode(reader)?;
                 let v = i128::from(v);
-                let v = -v;
-                let v = v.checked_sub(1)
-                    .ok_or_else(|| dec::Error::arithmetic_overflow(name, error::ArithmeticOverflow::Underflow))?;
+                let v = -v - 1;
                 Ok(Value::Integer(v))
             },
             major::BYTES => <types::Bytes<Vec<u8>>>::decode(reader)
