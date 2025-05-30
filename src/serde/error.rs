@@ -27,6 +27,7 @@ impl<E> From<E> for DecodeError<E> {
 #[cfg(feature = "serde1")]
 impl<E: core::error::Error + 'static> serde::de::Error for DecodeError<E> {
     fn custom<T: fmt::Display>(msg: T) -> Self {
+        use crate::alloc::string::ToString;
         DecodeError::Custom(msg.to_string().into_boxed_str())
     }
 }
@@ -65,6 +66,7 @@ impl<E> From<E> for EncodeError<E> {
 #[cfg(feature = "serde1")]
 impl<E: core::error::Error + 'static> serde::ser::Error for EncodeError<E> {
     fn custom<T: fmt::Display>(msg: T) -> Self {
+        use crate::alloc::string::ToString;
         EncodeError::Custom(msg.to_string().into_boxed_str())
     }
 }
