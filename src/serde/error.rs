@@ -77,5 +77,11 @@ impl<E: fmt::Debug> fmt::Display for EncodeError<E> {
     }
 }
 
-#[cfg(feature = "serde1")]
-impl<E: fmt::Debug> serde::ser::StdError for EncodeError<E> {}
+impl<E: core::error::Error + 'static> core::error::Error for EncodeError<E> {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            EncodeError::Core(err) => Some(err),
+            _ => None
+        }
+    }
+}
