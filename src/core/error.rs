@@ -149,9 +149,8 @@ impl<E: fmt::Debug> fmt::Display for DecodeError<E> {
     }
 }
 
-#[cfg(feature = "use_std")]
-impl<E: std::error::Error + 'static> std::error::Error for DecodeError<E> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl<E: core::error::Error + 'static> core::error::Error for DecodeError<E> {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             DecodeError::Read(err) => Some(err),
             _ => None
@@ -179,9 +178,8 @@ impl<E: fmt::Debug> fmt::Display for EncodeError<E> {
     }
 }
 
-#[cfg(feature = "use_std")]
-impl<E: std::error::Error + 'static> std::error::Error for EncodeError<E> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl<E: core::error::Error + 'static> core::error::Error for EncodeError<E> {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             EncodeError::Write(err) => Some(err),
         }
