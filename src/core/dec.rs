@@ -199,8 +199,8 @@ impl TypeNum {
         let mut buf = [0; 2];
         let n = match low(byte) | is_major {
             x @ 0 ..= 0x17 => return Ok(x.into()),
-            0x18 => 2-1,
-            0x19 => 2-2,
+            0x18 => 1,
+            0x19 => 0,
             _ => return Err(Error::mismatch(self.name, byte))
         };
         pull_exact(self.name, reader, &mut buf[n..])?;

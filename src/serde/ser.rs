@@ -267,9 +267,9 @@ impl<'a, W: enc::Write> serde::Serializer for &'a mut Serializer<W> {
     }
 
     #[inline]
-    fn collect_str<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
+    fn collect_str<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: fmt::Display,
+        T: fmt::Display + ?Sized,
     {
         collect_str(&mut self.writer, &value)
     }
