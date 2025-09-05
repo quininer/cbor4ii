@@ -901,10 +901,17 @@ pub fn if_major(byte: u8) -> u8 {
 
 #[inline]
 pub fn high(byte: u8) -> u8 {
-    byte & 0b11111000
+    byte & 0b11100000
 }
 
 #[inline]
 pub fn low(byte: u8) -> u8 {
     byte & 0b00011111
+}
+
+#[test]
+fn high_and_low() {
+    let b = 0b01010101;
+    assert_eq!(high(b), 0b01000000);
+    assert_eq!(low(b),  0b00010101);
 }
