@@ -484,9 +484,10 @@ fn decode_bytes<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, buf: &mut Vec<u8>
             let mut reader = ScopeGuard(reader, |reader| reader.step_out());
             let reader = &mut *reader;
 
-            if let Some(longbuf) = decode_bytes(num, reader, buf)? {
-                buf.extend_from_slice(longbuf);
-            }
+            // followed by a series of zero or more strings of
+            // the specified type ("chunks") that have **definite lengths**
+            let longbuf = decode_bytes_ref(num, reader)?;
+            buf.extend_from_slice(longbuf);
         }
 
         Ok(None)
