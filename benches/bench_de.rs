@@ -1,6 +1,7 @@
+use std::hint::black_box;
 use std::collections::HashMap;
 use serde::{ Serialize, Deserialize };
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 
 #[derive(Serialize, Deserialize)]
@@ -45,13 +46,15 @@ fn bench_de(c: &mut Criterion) {
 
     c.bench_function("cbor4ii-de", |b| {
         b.iter(|| {
-            let _log: Log = cbor4ii::serde::from_slice(black_box(&buf)).unwrap();
+            let log: Log = cbor4ii::serde::from_slice(black_box(&buf)).unwrap();
+            black_box(log);
         })
     });
 
     c.bench_function("serde_cbor-de", |b| {
         b.iter(|| {
-            let _log: Log = serde_cbor::from_slice(black_box(&buf)).unwrap();
+            let log: Log = serde_cbor::from_slice(black_box(&buf)).unwrap();
+            black_box(log);
         })
     });
 

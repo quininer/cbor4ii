@@ -349,3 +349,16 @@ fn test_cov_case() {
     let v = bool::decode(&mut SliceReader::new(buf.buffer())).unwrap();
     assert_eq!(v, true);
 }
+
+#[test]
+fn test_string_from_zero() {
+    let buf = &[0];
+    let v = <String>::decode(&mut SliceReader::new(buf));
+    match v.as_ref().err() {
+        Some(cbor4ii::core::error::DecodeError::Mismatch { name, found }) => {
+            assert_eq!(**name, "str");
+            assert_eq!(*found, 0);
+        },
+        _ => panic!("{:?}", v)
+    }
+}

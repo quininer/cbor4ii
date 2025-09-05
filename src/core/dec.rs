@@ -169,21 +169,23 @@ fn skip_exact<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R, mut len
     Ok(())
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct TypeNum {
     name: error::StaticStr,
-    major_limit: u8
+    major: u8
 }
 
 impl TypeNum {
     #[inline]
     pub(crate) const fn new(name: error::StaticStr, major: u8) -> TypeNum {
-        TypeNum { name, major_limit: !(major << 5) }
+        TypeNum { name, major: major << 5 }
     }
 
     #[inline]
     pub fn decode_u8<'de, R: Read<'de>>(self, reader: &mut R) -> Result<u8, Error<R::Error>> {
         let byte = pull_one(self.name, reader)?;
-        match byte & self.major_limit {
+        let is_major = high(byte) ^ self.major;
+        match low(byte) | is_major {
             x @ 0 ..= 0x17 => Ok(x),
             0x18 => pull_one(self.name, reader),
             _ => Err(Error::mismatch(self.name, byte))
@@ -193,61 +195,51 @@ impl TypeNum {
     #[inline]
     fn decode_u16<'de, R: Read<'de>>(self, reader: &mut R) -> Result<u16, Error<R::Error>> {
         let byte = pull_one(self.name, reader)?;
-        match byte & self.major_limit {
-            x @ 0 ..= 0x17 => Ok(x.into()),
-            0x18 => pull_one(self.name, reader).map(Into::into),
-            0x19 => {
-                let mut buf = [0; 2];
-                pull_exact(self.name, reader, &mut buf)?;
-                Ok(u16::from_be_bytes(buf))
-            },
-            _ => Err(Error::mismatch(self.name, byte))
-        }
+        let is_major = high(byte) ^ self.major;
+        let mut buf = [0; 2];
+        let n = match low(byte) | is_major {
+            x @ 0 ..= 0x17 => return Ok(x.into()),
+            0x18 => 2-1,
+            0x19 => 2-2,
+            _ => return Err(Error::mismatch(self.name, byte))
+        };
+        pull_exact(self.name, reader, &mut buf[n..])?;
+        Ok(u16::from_be_bytes(buf))
     }
 
     #[inline]
     fn decode_u32<'de, R: Read<'de>>(self, reader: &mut R) -> Result<u32, Error<R::Error>> {
         let byte = pull_one(self.name, reader)?;
-        match byte & self.major_limit {
-            x @ 0 ..= 0x17 => Ok(x.into()),
-            0x18 => pull_one(self.name, reader).map(Into::into),
-            0x19 => {
-                let mut buf = [0; 2];
-                pull_exact(self.name, reader, &mut buf)?;
-                Ok(u16::from_be_bytes(buf).into())
-            },
-            0x1a => {
-                let mut buf = [0; 4];
-                pull_exact(self.name, reader, &mut buf)?;
-                Ok(u32::from_be_bytes(buf))
-            }
-            _ => Err(Error::mismatch(self.name, byte))
-        }
+        let is_major = high(byte) ^ self.major;
+        let mut buf = [0; 4];
+        let n = match low(byte) | is_major {
+            x @ 0 ..= 0x17 => return Ok(x.into()),
+            0x1b.. => return Err(Error::mismatch(self.name, byte)),
+            x => 4-(1 << (x-0x17-1)),
+            // 0x18 => 4-1,
+            // 0x19 => 4-2,
+            // 0x1a => 4-4,
+        };
+        pull_exact(self.name, reader, &mut buf[n..])?;
+        Ok(u32::from_be_bytes(buf))
     }
 
     #[inline]
     pub(crate) fn decode_u64<'de, R: Read<'de>>(self, reader: &mut R) -> Result<u64, Error<R::Error>> {
         let byte = pull_one(self.name, reader)?;
-        match byte & self.major_limit {
-            x @ 0 ..= 0x17 => Ok(x.into()),
-            0x18 => pull_one(self.name, reader).map(Into::into),
-            0x19 => {
-                let mut buf = [0; 2];
-                pull_exact(self.name, reader, &mut buf)?;
-                Ok(u16::from_be_bytes(buf).into())
-            },
-            0x1a => {
-                let mut buf = [0; 4];
-                pull_exact(self.name, reader, &mut buf)?;
-                Ok(u32::from_be_bytes(buf).into())
-            },
-            0x1b => {
-                let mut buf = [0; 8];
-                pull_exact(self.name, reader, &mut buf)?;
-                Ok(u64::from_be_bytes(buf))
-            },
-            _ => Err(Error::mismatch(self.name, byte))
-        }
+        let is_major = high(byte) ^ self.major;
+        let mut buf = [0; 8];
+        let n = match low(byte) | is_major {
+            x @ 0 ..= 0x17 => return Ok(x.into()),
+            0x1c.. => return Err(Error::mismatch(self.name, byte)),
+            x => 8-(1 << (x-0x17-1)),
+            // 0x18 => 8-1,
+            // 0x19 => 8-2,
+            // 0x1a => 8-4,
+            // 0x1b => 8-8,
+        };
+        pull_exact(self.name, reader, &mut buf[n..])?;
+        Ok(u64::from_be_bytes(buf))
     }
 }
 
@@ -337,7 +329,7 @@ decode_ix! {
 
 #[inline]
 fn decode_x128<'de, R: Read<'de>>(name: error::StaticStr, reader: &mut R) -> Result<[u8; 16], Error<R::Error>> {
-    let len = decode_len(name, major::BYTES, reader)?;
+    let len = decode_len(TypeNum::new(name, major::BYTES), reader)?;
     let len = len.ok_or_else(|| Error::require_length(name, None))?;
 
     let mut buf = [0; 16];
@@ -417,13 +409,13 @@ impl<'de> Decode<'de> for i128 {
 }
 
 #[inline]
-fn decode_len<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &mut R)
+fn decode_len<'de, R: Read<'de>>(num: TypeNum, reader: &mut R)
     -> Result<Option<usize>, Error<R::Error>>
 {
-    let byte = peek_one(name, reader)?;
-    if byte != (marker::START | (major << 5)) {
-        let len = TypeNum::new(name, major).decode_u64(reader)?;
-        let len = usize::try_from(len).map_err(|_| Error::cast_overflow(name))?;
+    let byte = peek_one(num.name, reader)?;
+    if byte != (marker::START | num.major) {
+        let len = num.decode_u64(reader)?;
+        let len = usize::try_from(len).map_err(|_| Error::cast_overflow(num.name))?;
         Ok(Some(len))
     } else {
         reader.advance(1);
@@ -432,31 +424,31 @@ fn decode_len<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &mut
 }
 
 #[inline]
-fn decode_bytes_ref<'de, R: Read<'de>>(name: error::StaticStr, major: u8, reader: &mut R)
+fn decode_bytes_ref<'de, R: Read<'de>>(num: TypeNum, reader: &mut R)
     -> Result<&'de [u8], Error<R::Error>>
 {
-    let len = TypeNum::new(name, major).decode_u64(reader)?;
+    let len = num.decode_u64(reader)?;
     let len = usize::try_from(len)
-        .map_err(|_| Error::cast_overflow(name))?;
+        .map_err(|_| Error::cast_overflow(num.name))?;
 
     match reader.fill(len)? {
         Reference::Long(buf) if buf.len() >= len => {
             reader.advance(len);
             Ok(&buf[..len])
         },
-        Reference::Long(buf) => Err(Error::require_length(name, Some(buf.len()))),
-        Reference::Short(_) => Err(Error::require_borrowed(name))
+        Reference::Long(buf) => Err(Error::require_length(num.name, Some(buf.len()))),
+        Reference::Short(_) => Err(Error::require_borrowed(num.name))
     }
 }
 
 #[inline]
 #[cfg(feature = "use_alloc")]
-fn decode_bytes<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut R, buf: &mut Vec<u8>)
+fn decode_bytes<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, buf: &mut Vec<u8>)
     -> Result<Option<&'a [u8]>, Error<R::Error>>
 {
     const CAP_LIMIT: usize = 16 * 1024;
 
-    if let Some(mut len) = decode_len(name, major, reader)? {
+    if let Some(mut len) = decode_len(num, reader)? {
         // try long lifetime buffer
         if let Reference::Long(buf) = reader.fill(len)? {
             if buf.len() >= len {
@@ -472,7 +464,7 @@ fn decode_bytes<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut
             let readbuf = readbuf.as_ref();
 
             if readbuf.is_empty() {
-                return Err(Error::eof(name, len));
+                return Err(Error::eof(num.name, len));
             }
 
             let readlen = core::cmp::min(readbuf.len(), len);
@@ -485,14 +477,14 @@ fn decode_bytes<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut
         Ok(None)
     } else {
         // bytes sequence
-        while peek_one(name, reader)? != marker::BREAK {
+        while peek_one(num.name, reader)? != marker::BREAK {
             if !reader.step_in() {
-                return Err(Error::depth_overflow(name));
+                return Err(Error::depth_overflow(num.name));
             }
             let mut reader = ScopeGuard(reader, |reader| reader.step_out());
             let reader = &mut *reader;
 
-            if let Some(longbuf) = decode_bytes(name, major, reader, buf)? {
+            if let Some(longbuf) = decode_bytes(num, reader, buf)? {
                 buf.extend_from_slice(longbuf);
             }
         }
@@ -503,13 +495,13 @@ fn decode_bytes<'a, R: Read<'a>>(name: error::StaticStr, major: u8, reader: &mut
 
 #[cfg(feature = "use_alloc")]
 #[inline]
-fn decode_buf<'de, R>(name: error::StaticStr, major: u8, reader: &mut R)
+fn decode_buf<'de, R>(num: TypeNum, reader: &mut R)
     -> Result<Vec<u8>, Error<R::Error>>
 where
     R: Read<'de>,
 {
     let mut buf = Vec::new();
-    if let Some(buf_ref) = decode_bytes(name, major, reader, &mut buf)? {
+    if let Some(buf_ref) = decode_bytes(num, reader, &mut buf)? {
         buf.extend_from_slice(buf_ref);
     }
     Ok(buf)
@@ -517,7 +509,7 @@ where
 
 #[cfg(feature = "use_alloc")]
 #[inline]
-fn decode_cow_buf<'de, R>(name: error::StaticStr, major: u8, reader: &mut R)
+fn decode_cow_buf<'de, R>(num: TypeNum, reader: &mut R)
     -> Result<crate::alloc::borrow::Cow<'de, [u8]>, Error<R::Error>>
 where
     R: Read<'de>,
@@ -525,7 +517,7 @@ where
     use crate::alloc::borrow::Cow;
 
     let mut buf = Vec::new();
-    if let Some(buf_ref) = decode_bytes(name, major, reader, &mut buf)? {
+    if let Some(buf_ref) = decode_bytes(num, reader, &mut buf)? {
         core::mem::forget(buf);
         Ok(Cow::Borrowed(buf_ref))
     } else {
@@ -536,7 +528,7 @@ where
 impl<'de> Decode<'de> for types::Bytes<&'de [u8]> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_bytes_ref(&"bytes", major::BYTES, reader)?;
+        let buf = decode_bytes_ref(TypeNum::new(&"bytes", major::BYTES), reader)?;
         Ok(types::Bytes(buf))
     }
 }
@@ -545,7 +537,7 @@ impl<'de> Decode<'de> for types::Bytes<&'de [u8]> {
 impl<'de> Decode<'de> for types::Bytes<Vec<u8>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_buf(&"bytes", major::BYTES, reader)?;
+        let buf = decode_buf(TypeNum::new(&"bytes", major::BYTES), reader)?;
         Ok(types::Bytes(buf))
     }
 }
@@ -554,7 +546,7 @@ impl<'de> Decode<'de> for types::Bytes<Vec<u8>> {
 impl<'de> Decode<'de> for types::Bytes<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_cow_buf(&"bytes", major::BYTES, reader)?;
+        let buf = decode_cow_buf(TypeNum::new(&"bytes", major::BYTES), reader)?;
         Ok(types::Bytes(buf))
     }
 }
@@ -563,7 +555,7 @@ impl<'de> Decode<'de> for &'de str {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let name = &"str";
-        let buf = decode_bytes_ref(name, major::STRING, reader)?;
+        let buf = decode_bytes_ref(TypeNum::new(name, major::STRING), reader)?;
         core::str::from_utf8(buf).map_err(|_| Error::require_utf8(name))
     }
 }
@@ -600,7 +592,7 @@ impl<'de> Decode<'de> for crate::alloc::borrow::Cow<'de, str> {
 impl<'de> Decode<'de> for types::UncheckedStr<&'de [u8]> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_bytes_ref(&"str", major::STRING, reader)?;
+        let buf = decode_bytes_ref(TypeNum::new(&"str", major::STRING), reader)?;
         Ok(types::UncheckedStr(buf))
     }
 }
@@ -609,7 +601,7 @@ impl<'de> Decode<'de> for types::UncheckedStr<&'de [u8]> {
 impl<'de> Decode<'de> for types::UncheckedStr<Vec<u8>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_buf(&"str", major::STRING, reader)?;
+        let buf = decode_buf(TypeNum::new(&"str", major::STRING), reader)?;
         Ok(types::UncheckedStr(buf))
     }
 }
@@ -618,7 +610,7 @@ impl<'de> Decode<'de> for types::UncheckedStr<Vec<u8>> {
 impl<'de> Decode<'de> for types::UncheckedStr<crate::alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let buf = decode_cow_buf(&"str", major::STRING, reader)?;
+        let buf = decode_cow_buf(TypeNum::new(&"str", major::STRING), reader)?;
         Ok(types::UncheckedStr(buf))
     }
 }
@@ -628,7 +620,7 @@ pub struct ArrayStart(pub Option<usize>);
 impl<'de> types::Array<()> {
     #[inline]
     pub fn len<R: Read<'de>>(reader: &mut R) -> Result<Option<usize>, Error<R::Error>> {
-        decode_len(&"array", major::ARRAY, reader)
+        decode_len(TypeNum::new(&"array", major::ARRAY), reader)
     }
 }
 
@@ -666,7 +658,7 @@ impl<'de, T: Decode<'de>> Decode<'de> for Vec<T> {
 impl<'de> types::Map<()> {
     #[inline]
     pub fn len<R: Read<'de>>(reader: &mut R) -> Result<Option<usize>, Error<R::Error>> {
-        decode_len(&"map", major::MAP, reader)
+        decode_len(TypeNum::new(&"map", major::MAP), reader)
     }
 }
 
@@ -831,8 +823,8 @@ impl<'de> Decode<'de> for IgnoredAny {
         let byte = peek_one(name, reader)?;
 
         match if_major(byte) {
-            major @ major::UNSIGNED | major @ major::NEGATIVE => {
-                let skip = match byte & !(major << 5) {
+            major::UNSIGNED | major::NEGATIVE => {
+                let skip = match low(byte) {
                     0 ..= 0x17 => 0,
                     0x18 => 1,
                     0x19 => 2,
@@ -844,7 +836,7 @@ impl<'de> Decode<'de> for IgnoredAny {
             },
             major @ major::BYTES | major @ major::STRING |
             major @ major::ARRAY | major @ major::MAP => {
-                if let Some(len) = decode_len(name, major, reader)? {
+                if let Some(len) = decode_len(TypeNum::new(name, major), reader)? {
                     match major {
                         major::BYTES | major::STRING => skip_exact(name, reader, len)?,
                         major::ARRAY | major::MAP => for _ in 0..len {
@@ -904,4 +896,14 @@ pub fn is_break<'de, R: Read<'de>>(reader: &mut R) -> Result<bool, Error<R::Erro
 #[inline]
 pub fn if_major(byte: u8) -> u8 {
     byte >> 5
+}
+
+#[inline]
+pub fn high(byte: u8) -> u8 {
+    byte & 0b11111000
+}
+
+#[inline]
+pub fn low(byte: u8) -> u8 {
+    byte & 0b00011111
 }
