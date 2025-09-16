@@ -19,3 +19,7 @@ pub struct Null;
 pub struct Undefined;
 
 pub struct F16(pub u16);
+
+pub struct Maybe<T>(pub T);
+
+pub struct Nothing;
