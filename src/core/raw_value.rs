@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 use crate::core::{ enc, dec };
 
-
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct RawValue<'de>(&'de [u8]);
 
 struct RawValueReader<'r, 'de, R>
@@ -88,6 +88,55 @@ impl enc::Encode for RawValue<'_> {
     #[inline]
     fn encode<W: enc::Write>(&self, writer: &mut W) -> Result<(), enc::Error<W::Error>> {
         writer.push(self.0).map_err(enc::Error::Write)
+    }
+}
+
+impl<'de> RawValue<'de> {
+    pub fn as_bytes(&self) -> &'de [u8] {
+        self.0
+    }
+}
+
+#[cfg(feature = "use_alloc")]
+pub mod boxed {
+    use crate::core::Value;
+    use crate::core::utils::BufWriter;
+    use crate::alloc::boxed::Box;
+    use super::*;
+    
+    #[derive(PartialEq, Eq, Debug, Clone)]
+    pub struct BoxedRawValue(Box<[u8]>);
+
+    impl<'de> dec::Decode<'de> for BoxedRawValue {
+        #[inline]
+        fn decode<R: dec::Read<'de>>(reader: &mut R) -> Result<Self, dec::Error<R::Error>> {
+            let value = RawValue::decode(reader)?;
+            Ok(BoxedRawValue(Box::from(value.0)))
+        }
+    }
+
+    impl enc::Encode for BoxedRawValue {
+        #[inline]
+        fn encode<W: enc::Write>(&self, writer: &mut W) -> Result<(), enc::Error<W::Error>> {
+            writer.push(&self.0).map_err(enc::Error::Write)
+        }
+    }
+
+    impl BoxedRawValue {
+        pub fn as_bytes(&self) -> &[u8] {
+            &self.0
+        }
+
+        pub fn from_value(value: &Value)
+            -> Result<BoxedRawValue, enc::Error<crate::alloc::collections::TryReserveError>>
+        {
+            use crate::alloc::vec::Vec;
+            use crate::core::enc::Encode;
+            
+            let mut writer = BufWriter::new(Vec::new());
+            value.encode(&mut writer)?;
+            Ok(BoxedRawValue(writer.into_inner().into_boxed_slice()))
+        }
     }
 }
 
