@@ -68,6 +68,10 @@ pub enum DecodeError<E> {
     DepthOverflow {
         name: StaticStr
     },
+    Custom {
+        name: StaticStr,
+        num: u32
+    }
 }
 
 impl Len {
@@ -195,5 +199,5 @@ fn test_error_type_size() {
     assert_eq!(core::mem::size_of::<DecodeError<()>>(), 16);
 
     // a word type
-    assert_eq!(core::mem::size_of::<DecodeError<&'static ()>>(), 16);
+    assert_eq!(core::mem::size_of::<DecodeError<&'static u8>>(), 16);
 }
