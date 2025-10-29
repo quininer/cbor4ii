@@ -362,3 +362,64 @@ fn test_string_from_zero() {
         _ => panic!("{:?}", v)
     }
 }
+
+#[test]
+fn test_nothing() {
+    let mut writer = BufWriter::new(Vec::new());
+    types::Nothing.encode(&mut writer).unwrap();
+
+    let buf = writer.into_inner();
+    assert!(buf.is_empty());
+
+    let mut reader = SliceReader::new(&buf);
+    <types::Nothing>::decode(&mut reader).unwrap();
+}
+
+#[test]
+fn test_string_box_vec_maybe() {
+    // work
+    {
+        let obj = Some(Box::new(vec![
+            "1".to_owned(),
+            "2".to_owned(),
+        ]));
+
+        let mut writer = BufWriter::new(Vec::new());
+        types::Maybe(&obj).encode(&mut writer).unwrap();
+
+        let buf = writer.into_inner();
+        let mut reader = SliceReader::new(&buf);
+        let obj2 = <types::Maybe<Option<Box<Vec<String>>>>>::decode(&mut reader).unwrap();
+
+        assert_eq!(obj, obj2.0);        
+    }
+
+    // none
+    {
+        let obj: Option<String> = None;
+        let mut writer = BufWriter::new(Vec::new());
+        types::Maybe(&obj).encode(&mut writer).unwrap();
+
+        let buf = writer.into_inner();
+        let mut reader = SliceReader::new(&buf);
+        let obj2 = <types::Maybe<Option<Box<Vec<String>>>>>::decode(&mut reader).unwrap();    
+        assert!(obj2.0.is_none());        
+    }
+
+    // bad slice
+    {
+        let obj: Vec<String> = vec!["1".into(), "2".into(), "3".into()];
+        let mut writer = BufWriter::new(Vec::new());
+        obj.encode(&mut writer).unwrap();
+
+        let buf = writer.into_inner();
+        let mut reader = SliceReader::new(&buf);
+        match <types::Maybe<Option<String>>>::decode(&mut reader) {
+            Ok(_) => panic!(),
+            Err(dec::Error::RequireLength { name, .. }) => {
+                assert_eq!(name, &"maybe");
+            },
+            Err(_) => panic!()
+        }
+    }
+}

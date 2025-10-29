@@ -6,7 +6,7 @@ use crate::util::ScopeGuard;
 pub use crate::core::error::DecodeError as Error;
 
 #[cfg(feature = "use_alloc")]
-use crate::alloc::{ vec::Vec, string::String };
+use crate::alloc::{ boxed::Box, vec::Vec, string::String };
 
 
 /// Read trait
@@ -748,6 +748,18 @@ impl<'de, T: Decode<'de>> Decode<'de> for Option<T> {
     }
 }
 
+impl<'de, T: Decode<'de>> Decode<'de> for types::Maybe<Option<T>> {
+    #[inline]
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+        let len = <types::Array<()>>::len(reader)?;
+        match len {
+            Some(0) => Ok(types::Maybe(None)),
+            Some(1) => T::decode(reader).map(Some).map(types::Maybe),
+            _ => Err(Error::require_length(&"maybe", len))
+        }
+    }
+}
+
 impl<'de> Decode<'de> for types::F16 {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
@@ -805,6 +817,21 @@ impl<'de> Decode<'de> for f64 {
         } else {
             Err(Error::mismatch(name, byte))
         }
+    }
+}
+
+impl<'de> Decode<'de> for types::Nothing {
+    #[inline]
+    fn decode<R: Read<'de>>(_reader: &mut R) -> Result<Self, Error<R::Error>> {
+        Ok(types::Nothing)
+    }
+}
+
+#[cfg(feature = "use_alloc")]
+impl<'de, T: Decode<'de>> Decode<'de> for Box<T> {
+    #[inline]
+    fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
+        T::decode(reader).map(Box::new)
     }
 }
 

@@ -4,6 +4,8 @@ use core::convert::TryFrom;
 use crate::core::{ types, major, marker };
 pub use crate::core::error::EncodeError as Error;
 
+#[cfg(feature = "use_alloc")]
+use crate::alloc::{ boxed::Box, vec::Vec, string::String };
 
 /// Write trait
 ///
@@ -208,6 +210,14 @@ impl Encode for types::Bytes<&'_ [u8]> {
     }
 }
 
+#[cfg(feature = "use_alloc")]
+impl Encode for String {
+    #[inline]
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        self.as_str().encode(writer)
+    }
+}
+
 impl Encode for &'_ str {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
@@ -328,6 +338,13 @@ impl Encode for types::Undefined {
     }
 }
 
+impl<T: Encode> Encode for types::Maybe<&'_ Option<T>> {
+    #[inline]
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        self.0.as_slice().encode(writer)
+    }
+}
+
 #[cfg(feature = "half-f16")]
 impl Encode for half::f16 {
     #[inline]
@@ -362,6 +379,29 @@ impl Encode for f64 {
         let [x0, x1, x2, x3, x4, x5, x6, x7] = self.to_be_bytes();
         writer.push(&[marker::F64, x0, x1, x2, x3, x4, x5, x6, x7])?;
         Ok(())
+    }
+}
+
+impl Encode for types::Nothing {
+    #[inline]
+    fn encode<W: Write>(&self, _writer: &mut W) -> Result<(), Error<W::Error>> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "use_alloc")]
+impl<T: Encode> Encode for Box<T> {
+    #[inline]
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        <T as Encode>::encode(&**self, writer)
+    }
+}
+
+#[cfg(feature = "use_alloc")]
+impl<T: Encode> Encode for Vec<T> {
+    #[inline]
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
+        self.as_slice().encode(writer)
     }
 }
 

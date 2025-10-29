@@ -13,6 +13,9 @@ use crate::alloc::{ vec::Vec, boxed::Box, string::String };
 
 pub use raw_value::RawValue;
 
+#[cfg(feature = "use_alloc")]
+pub use raw_value::boxed::BoxedRawValue;
+
 
 /// Major type
 pub mod major {
