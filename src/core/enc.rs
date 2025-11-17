@@ -69,8 +69,9 @@ impl Encode for TypeNum<u16> {
         match u8::try_from(self.value) {
             Ok(x) => TypeNum::new(self.type_, x).encode(writer)?,
             Err(_) => {
-                let [x0, x1] = self.value.to_be_bytes();
-                writer.push(&[self.type_ | 0x19, x0, x1])?
+                let mut buf = [self.type_ | 0x19, 0, 0];
+                buf[1..3].copy_from_slice(&self.value.to_be_bytes());
+                writer.push(&buf)?
             }
         }
         Ok(())
@@ -83,8 +84,9 @@ impl Encode for TypeNum<u32> {
         match u16::try_from(self.value) {
             Ok(x) => TypeNum::new(self.type_, x).encode(writer)?,
             Err(_) =>{
-                let [x0, x1, x2, x3] = self.value.to_be_bytes();
-                writer.push(&[self.type_ | 0x1a, x0, x1, x2, x3])?;
+                let mut buf = [self.type_ | 0x1a, 0, 0, 0, 0];
+                buf[1..5].copy_from_slice(&self.value.to_be_bytes());
+                writer.push(&buf)?;
             }
         }
         Ok(())
@@ -97,8 +99,9 @@ impl Encode for TypeNum<u64> {
         match u32::try_from(self.value) {
             Ok(x) => TypeNum::new(self.type_, x).encode(writer)?,
             Err(_) => {
-                let [x0, x1, x2, x3, x4, x5, x6, x7] = self.value.to_be_bytes();
-                writer.push(&[self.type_ | 0x1b, x0, x1, x2, x3, x4, x5, x6, x7])?;
+                let mut buf = [self.type_ | 0x1b, 0, 0, 0, 0, 0, 0, 0, 0];
+                buf[1..9].copy_from_slice(&self.value.to_be_bytes());
+                writer.push(&buf)?;
             }
         }
         Ok(())
@@ -349,8 +352,9 @@ impl<T: Encode> Encode for types::Maybe<&'_ Option<T>> {
 impl Encode for half::f16 {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        let [x0, x1] = self.to_be_bytes();
-        writer.push(&[marker::F16, x0, x1])?;
+        let mut buf = [marker::F16, 0, 0];
+        buf[1..3].copy_from_slice(&self.to_be_bytes());
+        writer.push(&buf)?;
         Ok(())
     }
 }
@@ -358,8 +362,9 @@ impl Encode for half::f16 {
 impl Encode for types::F16 {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        let [x0, x1] = self.0.to_be_bytes();
-        writer.push(&[marker::F16, x0, x1])?;
+        let mut buf = [marker::F16, 0, 0];
+        buf[1..3].copy_from_slice(&self.0.to_be_bytes());
+        writer.push(&buf)?;
         Ok(())
     }
 }
@@ -367,8 +372,9 @@ impl Encode for types::F16 {
 impl Encode for f32 {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        let [x0, x1, x2, x3] = self.to_be_bytes();
-        writer.push(&[marker::F32, x0, x1, x2, x3])?;
+        let mut buf = [marker::F32, 0, 0, 0, 0];
+        buf[1..5].copy_from_slice(&self.to_be_bytes());
+        writer.push(&buf)?;
         Ok(())
     }
 }
@@ -376,8 +382,9 @@ impl Encode for f32 {
 impl Encode for f64 {
     #[inline]
     fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error<W::Error>> {
-        let [x0, x1, x2, x3, x4, x5, x6, x7] = self.to_be_bytes();
-        writer.push(&[marker::F64, x0, x1, x2, x3, x4, x5, x6, x7])?;
+        let mut buf = [marker::F64, 0, 0, 0, 0, 0, 0, 0, 0];
+        buf[1..9].copy_from_slice(&self.to_be_bytes());
+        writer.push(&buf)?;
         Ok(())
     }
 }
@@ -478,6 +485,7 @@ fn test_encoded() -> anyhow::Result<()> {
         1.1f64, "0xfb3ff199999999999a";
         @ #[cfg(feature = "half-f16")] half::f16::from_f32(1.5), "0xf93e00";
         @ #[cfg(feature = "half-f16")] half::f16::from_f32(65504.0), "0xf97bff";
+        types::F16(0x7bff), "0xf97bff";
         100000.0f32, "0xfa47c35000";
         3.4028234663852886e+38f32, "0xfa7f7fffff";
         1.0e+300f64, "0xfb7e37e43c8800759c";
