@@ -29,7 +29,10 @@ pub mod major {
     pub const SIMPLE:   u8 = 7;
 }
 
-pub(crate) mod marker {
+/// Markers needed to parse sub types.
+/// The `START` marker can be combined with major types 2, 3, 4 and 5.
+/// The other values are full bytes representing the major type 7 sub-types.
+pub mod marker {
     pub const START: u8 = 0x1f;
     pub const FALSE: u8 = 0xf4; // simple(20)
     pub const TRUE: u8  = 0xf5; // simple(21)
