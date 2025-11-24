@@ -190,6 +190,7 @@ impl<E: core::error::Error + 'static> core::error::Error for EncodeError<E> {
     }
 }
 
+#[cfg(target_pointer_width = "64")]
 #[test]
 fn test_error_type_size() {
     // bottom type
