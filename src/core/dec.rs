@@ -443,12 +443,38 @@ fn decode_bytes_ref<'de, R: Read<'de>>(num: TypeNum, reader: &mut R)
 
 #[inline]
 #[cfg(feature = "use_alloc")]
-fn decode_bytes<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, buf: &mut Vec<u8>)
-    -> Result<Option<&'a [u8]>, Error<R::Error>>
+fn decode_bytes_buf<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, len: usize, buf: &mut Vec<u8>)
+    -> Result<(), Error<R::Error>>
 {
     const CAP_LIMIT: usize = 16 * 1024;
 
-    if let Some(mut len) = decode_len(num, reader)? {
+    let mut len = len;
+    buf.reserve(core::cmp::min(len, CAP_LIMIT)); // TODO try_reserve ?
+
+    while len != 0 {
+        let readbuf = reader.fill(len)?;
+        let readbuf = readbuf.as_ref();
+
+        if readbuf.is_empty() {
+            return Err(Error::eof(num.name, len));
+        }
+
+        let readlen = core::cmp::min(readbuf.len(), len);
+
+        buf.extend_from_slice(&readbuf[..readlen]);
+        reader.advance(readlen);
+        len -= readlen;
+    }
+
+    Ok(())    
+}
+
+#[inline]
+#[cfg(feature = "use_alloc")]
+fn decode_bytes<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, buf: &mut Vec<u8>)
+    -> Result<Option<&'a [u8]>, Error<R::Error>>
+{
+    if let Some(len) = decode_len(num, reader)? {
         // try long lifetime buffer
         if let Reference::Long(buf) = reader.fill(len)? {
             if buf.len() >= len {
@@ -457,22 +483,7 @@ fn decode_bytes<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, buf: &mut Vec<u8>
             }
         }
 
-        buf.reserve(core::cmp::min(len, CAP_LIMIT)); // TODO try_reserve ?
-
-        while len != 0 {
-            let readbuf = reader.fill(len)?;
-            let readbuf = readbuf.as_ref();
-
-            if readbuf.is_empty() {
-                return Err(Error::eof(num.name, len));
-            }
-
-            let readlen = core::cmp::min(readbuf.len(), len);
-
-            buf.extend_from_slice(&readbuf[..readlen]);
-            reader.advance(readlen);
-            len -= readlen;
-        }
+        decode_bytes_buf(num, reader, len, buf)?;
 
         Ok(None)
     } else {
@@ -486,8 +497,9 @@ fn decode_bytes<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, buf: &mut Vec<u8>
 
             // followed by a series of zero or more strings of
             // the specified type ("chunks") that have **definite lengths**
-            let longbuf = decode_bytes_ref(num, reader)?;
-            buf.extend_from_slice(longbuf);
+            let len = decode_len(num, reader)?
+                .ok_or_else(|| Error::require_length(num.name, None))?;
+            decode_bytes_buf(num, reader, len, buf)?;
         }
 
         Ok(None)

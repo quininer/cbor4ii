@@ -423,3 +423,36 @@ fn test_string_box_vec_maybe() {
         }
     }
 }
+
+#[test]
+fn test_mock_chunk_string() {
+    struct ChunkReader(Vec<u8>, usize);
+
+    impl<'de> dec::Read<'de> for ChunkReader {
+        type Error = std::io::Error;
+
+        #[inline]
+        fn fill<'b>(&'b mut self, _want: usize) -> Result<dec::Reference<'de, 'b>, Self::Error> {
+            let range = self.1..(self.1+1);
+            let buf = &self.0[range];
+            Ok(dec::Reference::Short(buf))
+        }
+
+        #[inline]
+        fn advance(&mut self, n: usize) {
+            self.1 += n;
+        }        
+    }
+    
+    let mut writer = BufWriter::new(Vec::new());
+    types::UncheckedStr::unbounded(&mut writer).unwrap();
+    "123".encode(&mut writer).unwrap();
+    "456".encode(&mut writer).unwrap();
+    types::UncheckedStr::end(&mut writer).unwrap();
+    let buf = writer.into_inner();
+
+    let mut reader = ChunkReader(buf, 0);
+    let s = String::decode(&mut reader).unwrap();
+
+    assert_eq!(s, "123456");
+}
