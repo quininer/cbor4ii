@@ -481,6 +481,19 @@ fn test_regression_min_i64() {
 }
 
 #[test]
+fn test_regression_any_big_negative() {
+    use cbor4ii::core::Value;
+
+    let max_neg_64 = -i128::from(u64::MAX) - 1;
+
+    for n in [i128::from(i64::MIN), i128::from(i64::MIN) - 1, max_neg_64, max_neg_64 - 1] {
+        let value = Value::Integer(n);
+        let buf = to_vec(Vec::new(), &value).unwrap();
+        assert_eq!(de(&buf, &value), value);
+    }
+}
+
+#[test]
 fn test_display_ser_len() {
     struct Test {
         long: char,
