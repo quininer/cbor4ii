@@ -1,3 +1,4 @@
+use core::convert::TryFrom;
 use crate::alloc::borrow::Cow;
 use serde::de::{ self, Visitor };
 use crate::core::{ major, marker, types, error };
@@ -63,7 +64,13 @@ impl<'de, R: dec::Read<'de>> serde::Deserializer<'de> for &mut Deserializer<R> {
         let byte = dec::peek_one(name, &mut de.reader)?;
         match dec::if_major(byte) {
             major::UNSIGNED => de.deserialize_u64(visitor),
-            major::NEGATIVE => de.deserialize_i64(visitor),
+            major::NEGATIVE => {
+                let v = i128::decode(&mut de.reader)?;
+                match i64::try_from(v) {
+                    Ok(v) => visitor.visit_i64(v),
+                    Err(_) => visitor.visit_i128(v)
+                }
+            },
             major::BYTES => de.deserialize_byte_buf(visitor),
             major::STRING => de.deserialize_string(visitor),
             major::ARRAY => de.deserialize_seq(visitor),
