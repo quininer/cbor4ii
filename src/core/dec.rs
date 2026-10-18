@@ -488,7 +488,7 @@ fn decode_bytes<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, buf: &mut Vec<u8>
         Ok(None)
     } else {
         // bytes sequence
-        while peek_one(num.name, reader)? != marker::BREAK {
+        while !is_break(reader)? {
             if !reader.step_in() {
                 return Err(Error::depth_overflow(num.name));
             }
