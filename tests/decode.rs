@@ -456,3 +456,35 @@ fn test_mock_chunk_string() {
 
     assert_eq!(s, "123456");
 }
+
+#[test]
+fn test_inf_string_regression_issue60() {
+    fn decode(bytes: &[u8]) -> Result<Value, String> {
+        Value::decode(&mut SliceReader::new(bytes)).map_err(|e| format!("{e:?}"))
+    }
+
+    // [_ (_ ""), "a"]: an indefinite-length array holding an empty
+    // indefinite-length text string and "a"
+    assert_eq!(
+        decode(&[0x9f, 0x7f, 0xff, 0x61, 0x61, 0xff]),
+        Ok(Value::Array(vec![Value::Text(String::new()), Value::Text("a".into())]))
+    );
+
+    // [(_ ""), "a"]: the same items in a definite-length array
+    assert_eq!(
+        decode(&[0x82, 0x7f, 0xff, 0x61, 0x61]),
+        Ok(Value::Array(vec![Value::Text(String::new()), Value::Text("a".into())]))
+    );
+    
+    // {(_ "k"): 1}
+    assert_eq!(
+        decode(&[0xa1, 0x7f, 0x61, 0x6b, 0xff, 0x01]),
+        Ok(Value::Map(vec![(Value::Text("k".into()), Value::Integer(1))]))
+    );
+
+    // [_ (_ h'01'), h'02']
+    assert_eq!(
+        decode(&[0x9f, 0x5f, 0x41, 0x01, 0xff, 0x41, 0x02, 0xff]),
+        Ok(Value::Array(vec![Value::Bytes(vec![1]), Value::Bytes(vec![2])]))
+    );
+}
