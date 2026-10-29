@@ -103,6 +103,12 @@ impl<'de, R: dec::Read<'de>> serde::Deserializer<'de> for &mut Deserializer<R> {
                 },
                 marker::F32 => de.deserialize_f32(visitor),
                 marker::F64 => de.deserialize_f64(visitor),
+                // unassigned simple values have no serde equivalent,
+                // read them as null like undefined (RFC 8949, section 6.1)
+                0xe0 ..= 0xf3 | 0xf8 => {
+                    let _simple = types::Simple::decode(&mut de.reader)?;
+                    visitor.visit_none()
+                },
                 _ => Err(dec::Error::unsupported(name, byte).into())
             },
             _ => Err(dec::Error::unsupported(name, byte).into())
