@@ -5,7 +5,7 @@ use crate::core::{ enc, dec };
 #[derive(Debug)]
 pub enum DecodeError<E> {
     Core(dec::Error<E>),
-    Custom(crate::alloc::boxed::Box<str>)
+    Custom(#[cfg(feature = "use_alloc")] alloc::boxed::Box<str>),
 }
 
 impl<E> From<dec::Error<E>> for DecodeError<E> {
@@ -27,8 +27,7 @@ impl<E> From<E> for DecodeError<E> {
 #[cfg(feature = "serde1")]
 impl<E: core::error::Error + 'static> serde::de::Error for DecodeError<E> {
     fn custom<T: fmt::Display>(msg: T) -> Self {
-        use crate::alloc::string::ToString;
-        DecodeError::Custom(msg.to_string().into_boxed_str())
+        DecodeError::Custom(#[cfg(feature = "use_alloc")] alloc::string::ToString::to_string(&msg).into_boxed_str())
     }
 }
 
@@ -44,7 +43,7 @@ impl<E: fmt::Debug> serde::ser::StdError for DecodeError<E> {}
 #[derive(Debug)]
 pub enum EncodeError<E> {
     Core(enc::Error<E>),
-    Custom(crate::alloc::boxed::Box<str>)
+    Custom(#[cfg(feature = "use_alloc")] alloc::boxed::Box<str>)
 }
 
 impl<E> From<enc::Error<E>> for EncodeError<E> {
@@ -66,8 +65,7 @@ impl<E> From<E> for EncodeError<E> {
 #[cfg(feature = "serde1")]
 impl<E: core::error::Error + 'static> serde::ser::Error for EncodeError<E> {
     fn custom<T: fmt::Display>(msg: T) -> Self {
-        use crate::alloc::string::ToString;
-        EncodeError::Custom(msg.to_string().into_boxed_str())
+        EncodeError::Custom(#[cfg(feature = "use_alloc")] alloc::string::ToString::to_string(&msg).into_boxed_str())
     }
 }
 

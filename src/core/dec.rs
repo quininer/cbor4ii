@@ -6,7 +6,7 @@ use crate::util::ScopeGuard;
 pub use crate::core::error::DecodeError as Error;
 
 #[cfg(feature = "use_alloc")]
-use crate::alloc::{ boxed::Box, vec::Vec, string::String };
+use alloc::{ boxed::Box, vec::Vec, string::String };
 
 
 /// Read trait
@@ -466,7 +466,7 @@ fn decode_bytes_buf<'a, R: Read<'a>>(num: TypeNum, reader: &mut R, len: usize, b
         len -= readlen;
     }
 
-    Ok(())    
+    Ok(())
 }
 
 #[inline]
@@ -523,11 +523,11 @@ where
 #[cfg(feature = "use_alloc")]
 #[inline]
 fn decode_cow_buf<'de, R>(num: TypeNum, reader: &mut R)
-    -> Result<crate::alloc::borrow::Cow<'de, [u8]>, Error<R::Error>>
+    -> Result<alloc::borrow::Cow<'de, [u8]>, Error<R::Error>>
 where
     R: Read<'de>,
 {
-    use crate::alloc::borrow::Cow;
+    use alloc::borrow::Cow;
 
     let mut buf = Vec::new();
     if let Some(buf_ref) = decode_bytes(num, reader, &mut buf)? {
@@ -556,7 +556,7 @@ impl<'de> Decode<'de> for types::Bytes<Vec<u8>> {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'de> Decode<'de> for types::Bytes<crate::alloc::borrow::Cow<'de, [u8]>> {
+impl<'de> Decode<'de> for types::Bytes<alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let buf = decode_cow_buf(TypeNum::new(&"bytes", major::BYTES), reader)?;
@@ -583,10 +583,10 @@ impl<'de> Decode<'de> for String {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'de> Decode<'de> for crate::alloc::borrow::Cow<'de, str> {
+impl<'de> Decode<'de> for alloc::borrow::Cow<'de, str> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        use crate::alloc::borrow::Cow;
+        use alloc::borrow::Cow;
 
         let name = &"str";
         let types::UncheckedStr(buf) = <types::UncheckedStr<Cow<'_, [u8]>>>::decode(reader)?;
@@ -620,7 +620,7 @@ impl<'de> Decode<'de> for types::UncheckedStr<Vec<u8>> {
 }
 
 #[cfg(feature = "use_alloc")]
-impl<'de> Decode<'de> for types::UncheckedStr<crate::alloc::borrow::Cow<'de, [u8]>> {
+impl<'de> Decode<'de> for types::UncheckedStr<alloc::borrow::Cow<'de, [u8]>> {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
         let buf = decode_cow_buf(TypeNum::new(&"str", major::STRING), reader)?;
