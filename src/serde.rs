@@ -25,9 +25,10 @@ mod io_writer {
     }
 }
 
+#[cfg(feature = "use_alloc")]
 mod buf_writer {
-    use crate::alloc::vec::Vec;
-    use crate::alloc::collections::TryReserveError;
+    use alloc::vec::Vec;
+    use alloc::collections::TryReserveError;
     use serde::Serialize;
     use crate::core::utils::BufWriter;
     use crate::serde::error::EncodeError;
@@ -83,7 +84,7 @@ mod io_buf_reader {
 
 #[cfg(feature = "use_std")] pub use io_writer::to_writer;
 #[cfg(feature = "use_std")] pub use io_buf_reader::from_reader;
-pub use buf_writer::to_vec;
+#[cfg(feature = "use_alloc")] pub use buf_writer::to_vec;
 pub use slice_reader::from_slice;
 
 pub use error::{ EncodeError, DecodeError };

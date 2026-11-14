@@ -10,10 +10,11 @@ license = "MIT"
 edition = "2018"
 
 [features]
-use_std = [ "use_alloc" ]
-use_alloc = []
+use_std = [ "use_alloc", "serde?/std" ]
+use_alloc = [ "serde?/alloc" ]
 half-f16 = [ "half" ]
-serde1 = [ "serde/alloc", "use_alloc" ]
+serde1_noalloc = [ "dep:serde" ]
+serde1 = [ "serde1_noalloc", "use_alloc" ]
 
 [dependencies]
 half = { version = "2", default-features = false, optional = true }

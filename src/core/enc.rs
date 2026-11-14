@@ -5,7 +5,7 @@ use crate::core::{ types, major, marker };
 pub use crate::core::error::EncodeError as Error;
 
 #[cfg(feature = "use_alloc")]
-use crate::alloc::{ boxed::Box, vec::Vec, string::String };
+use alloc::{ boxed::Box, vec::Vec, string::String };
 
 /// Write trait
 ///
