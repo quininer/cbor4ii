@@ -24,7 +24,7 @@ impl<E> From<E> for DecodeError<E> {
     }
 }
 
-#[cfg(feature = "serde1")]
+#[cfg(feature = "serde1_noalloc")]
 impl<E: core::error::Error + 'static> serde::de::Error for DecodeError<E> {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         DecodeError::Custom(#[cfg(feature = "use_alloc")] alloc::string::ToString::to_string(&msg).into_boxed_str())
@@ -37,7 +37,7 @@ impl<E: fmt::Debug> fmt::Display for DecodeError<E> {
     }
 }
 
-#[cfg(feature = "serde1")]
+#[cfg(feature = "serde1_noalloc")]
 impl<E: fmt::Debug> serde::ser::StdError for DecodeError<E> {}
 
 #[derive(Debug)]
@@ -62,7 +62,7 @@ impl<E> From<E> for EncodeError<E> {
     }
 }
 
-#[cfg(feature = "serde1")]
+#[cfg(feature = "serde1_noalloc")]
 impl<E: core::error::Error + 'static> serde::ser::Error for EncodeError<E> {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         EncodeError::Custom(#[cfg(feature = "use_alloc")] alloc::string::ToString::to_string(&msg).into_boxed_str())

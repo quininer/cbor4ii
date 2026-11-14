@@ -143,7 +143,7 @@ impl<'de> dec::Decode<'de> for Value {
     }
 }
 
-#[cfg(all(feature = "serde1", feature = "use_alloc"))]
+#[cfg(all(feature = "serde1_noalloc", feature = "use_alloc"))]
 impl serde::Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -178,7 +178,7 @@ impl serde::Serialize for Value {
     }
 }
 
-#[cfg(all(feature = "serde1", feature = "use_alloc"))]
+#[cfg(all(feature = "serde1_noalloc", feature = "use_alloc"))]
 impl<'de> serde::Deserialize<'de> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

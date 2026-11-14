@@ -1,4 +1,4 @@
-#![cfg(all(feature = "serde1", feature = "use_std"))]
+#![cfg(all(feature = "serde1_noalloc", feature = "use_std"))]
 
 use std::iter::FromIterator;
 use std::collections::BTreeMap;

@@ -7,5 +7,5 @@ extern crate alloc;
 mod util;
 pub mod core;
 
-#[cfg(feature = "serde1")]
+#[cfg(feature = "serde1_noalloc")]
 pub mod serde;
