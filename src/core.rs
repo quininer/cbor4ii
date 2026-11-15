@@ -9,7 +9,7 @@ pub mod dec;
 pub mod utils;
 
 #[cfg(feature = "use_alloc")]
-use crate::alloc::{ vec::Vec, boxed::Box, string::String };
+use alloc::{ vec::Vec, boxed::Box, string::String };
 
 pub use raw_value::RawValue;
 
@@ -143,7 +143,7 @@ impl<'de> dec::Decode<'de> for Value {
     }
 }
 
-#[cfg(feature = "serde1")]
+#[cfg(all(feature = "serde1_noalloc", feature = "use_alloc"))]
 impl serde::Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -178,7 +178,7 @@ impl serde::Serialize for Value {
     }
 }
 
-#[cfg(feature = "serde1")]
+#[cfg(all(feature = "serde1_noalloc", feature = "use_alloc"))]
 impl<'de> serde::Deserialize<'de> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

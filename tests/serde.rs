@@ -1,4 +1,4 @@
-#![cfg(all(feature = "serde1", feature = "use_std"))]
+#![cfg(all(feature = "serde1_noalloc", feature = "use_std"))]
 
 use std::{ io, fmt };
 use std::collections::BTreeMap;

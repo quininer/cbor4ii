@@ -101,9 +101,9 @@ impl<'de> RawValue<'de> {
 pub mod boxed {
     use crate::core::Value;
     use crate::core::utils::BufWriter;
-    use crate::alloc::boxed::Box;
+    use alloc::boxed::Box;
     use super::*;
-    
+
     #[derive(PartialEq, Eq, Debug, Clone)]
     pub struct BoxedRawValue(Box<[u8]>);
 
@@ -128,11 +128,11 @@ pub mod boxed {
         }
 
         pub fn from_value(value: &Value)
-            -> Result<BoxedRawValue, enc::Error<crate::alloc::collections::TryReserveError>>
+            -> Result<BoxedRawValue, enc::Error<alloc::collections::TryReserveError>>
         {
-            use crate::alloc::vec::Vec;
+            use alloc::vec::Vec;
             use crate::core::enc::Encode;
-            
+
             let mut writer = BufWriter::new(Vec::new());
             value.encode(&mut writer)?;
             Ok(BoxedRawValue(writer.into_inner().into_boxed_slice()))
@@ -213,10 +213,10 @@ fn test_raw_value() {
         // check from value
         {
             use crate::core::Value;
-            
+
             let mut reader = SliceReader::new(buf.buffer());
             let map = <types::Map<Vec<(&str, Value)>>>::decode(&mut reader).unwrap();
-            
+
             let bar_value = &map.0[0].1;
             let bar_raw_value2 = BoxedRawValue::from_value(&bar_value).unwrap();
             assert_eq!(bar_raw_value, &bar_raw_value2);
@@ -246,6 +246,6 @@ fn test_raw_value() {
 
         assert_eq!(bar.0.len(), 1);
         assert_eq!(bar.0[0].0, "value");
-        assert_eq!(bar.0[0].1, 0x99);        
+        assert_eq!(bar.0[0].1, 0x99);
     }
 }

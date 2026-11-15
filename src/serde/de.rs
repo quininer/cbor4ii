@@ -1,5 +1,6 @@
 use core::convert::TryFrom;
-use crate::alloc::borrow::Cow;
+#[cfg(feature = "use_alloc")]
+use alloc::borrow::Cow;
 use serde::de::{ self, Visitor };
 use crate::core::{ major, marker, types, error };
 use crate::core::dec::{ self, Decode };
@@ -141,10 +142,13 @@ impl<'de, R: dec::Read<'de>> serde::Deserializer<'de> for &mut Deserializer<R> {
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
+        #[cfg(feature = "use_alloc")]
         match <types::Bytes<Cow<[u8]>>>::decode(&mut self.reader)?.0 {
             Cow::Borrowed(buf) => visitor.visit_borrowed_bytes(buf),
             Cow::Owned(buf) => visitor.visit_byte_buf(buf)
         }
+        #[cfg(not(feature = "use_alloc"))]
+        visitor.visit_borrowed_bytes(<types::Bytes<&[u8]>>::decode(&mut self.reader)?.0)
     }
 
     #[inline]
@@ -158,10 +162,13 @@ impl<'de, R: dec::Read<'de>> serde::Deserializer<'de> for &mut Deserializer<R> {
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
+        #[cfg(feature = "use_alloc")]
         match <Cow<str>>::decode(&mut self.reader)? {
             Cow::Borrowed(buf) => visitor.visit_borrowed_str(buf),
             Cow::Owned(buf) => visitor.visit_string(buf)
         }
+        #[cfg(not(feature = "use_alloc"))]
+        visitor.visit_borrowed_str(<&str>::decode(&mut self.reader)?)
     }
 
     #[inline]

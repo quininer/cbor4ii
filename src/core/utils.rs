@@ -1,5 +1,5 @@
 #[cfg(feature = "use_alloc")]
-use crate::alloc::vec::Vec;
+use alloc::vec::Vec;
 #[cfg(feature = "use_alloc")]
 use crate::core::enc;
 use crate::core::dec;
@@ -33,7 +33,7 @@ impl BufWriter {
 
 #[cfg(feature = "use_alloc")]
 impl enc::Write for BufWriter {
-    type Error = crate::alloc::collections::TryReserveError;
+    type Error = alloc::collections::TryReserveError;
 
     #[inline]
     fn push(&mut self, input: &[u8]) -> Result<(), Self::Error> {
