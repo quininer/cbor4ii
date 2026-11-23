@@ -57,7 +57,8 @@ pub enum Value {
     Text(String),
     Array(Vec<Value>),
     Map(Vec<(Value, Value)>),
-    Tag(u64, Box<Value>)
+    Tag(u64, Box<Value>),
+    Simple(u8)
 }
 
 #[cfg(feature = "use_alloc")]
@@ -72,7 +73,8 @@ impl enc::Encode for Value {
             Value::Text(v) => v.as_str().encode(writer),
             Value::Array(v) => v.as_slice().encode(writer),
             Value::Map(v) => types::Map(v.as_slice()).encode(writer),
-            Value::Tag(tag, v) => types::Tag(*tag, &**v).encode(writer)
+            Value::Tag(tag, v) => types::Tag(*tag, &**v).encode(writer),
+            Value::Simple(v) => types::Simple(*v).encode(writer)
         }
     }
 }
@@ -136,6 +138,9 @@ impl<'de> dec::Decode<'de> for Value {
                     .map(|v| Value::Float(v.into())),
                 marker::F64 => f64::decode(reader)
                     .map(Value::Float),
+                // unassigned simple values
+                0xe0 ..= 0xf3 | 0xf8 => types::Simple::decode(reader)
+                    .map(|v| Value::Simple(v.0)),
                 _ => Err(dec::Error::unsupported(name, byte))
             },
             _ => Err(dec::Error::unsupported(name, byte))
@@ -173,7 +178,9 @@ impl serde::Serialize for Value {
                 map.end()
             },
             Value::Tag(..) =>
-                Err(S::Error::custom("serialization Tag via serde is not supported"))
+                Err(S::Error::custom("serialization Tag via serde is not supported")),
+            Value::Simple(..) =>
+                Err(S::Error::custom("serialization Simple via serde is not supported"))
         }
     }
 }

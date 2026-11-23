@@ -727,7 +727,15 @@ impl<'de, T: Decode<'de>> Decode<'de> for types::Tag<T> {
 impl<'de> Decode<'de> for types::Simple {
     #[inline]
     fn decode<R: Read<'de>>(reader: &mut R) -> Result<Self, Error<R::Error>> {
-        let n = TypeNum::new(&"simple", major::SIMPLE).decode_u8(reader)?;
+        let name = &"simple";
+        let byte = peek_one(name, reader)?;
+        let n = TypeNum::new(name, major::SIMPLE).decode_u8(reader)?;
+
+        // simple(0) to simple(31) in two bytes are not well-formed
+        if byte == 0xf8 && n < 0x20 {
+            return Err(Error::mismatch(name, n));
+        }
+
         Ok(types::Simple(n))
     }
 }
@@ -911,6 +919,11 @@ impl<'de> Decode<'de> for IgnoredAny {
                     marker::F16 => 2,
                     marker::F32 => 4,
                     marker::F64 => 8,
+                    // unassigned simple values
+                    0xe0 ..= 0xf3 | 0xf8 => {
+                        let _simple = types::Simple::decode(reader)?;
+                        return Ok(IgnoredAny);
+                    },
                     _ => return Err(Error::unsupported(name, byte))
                 };
                 skip_exact(name, reader, skip + 1)?;

@@ -548,3 +548,27 @@ fn test_regression_f16() {
         _ => panic!()
     }
 }
+
+#[test]
+fn test_serde_unassigned_simple() {
+    use cbor4ii::core::Value;
+
+    #[derive(Deserialize, Debug, PartialEq)]
+    struct Foo {
+        b: u8
+    }
+
+    // [1, simple(0), simple(255)]
+    let buf = [0x83, 0x01, 0xe0, 0xf8, 0xff];
+    let value: Value = from_slice(&buf).unwrap();
+    assert_eq!(value, Value::Array(vec![Value::Integer(1), Value::Null, Value::Null]));
+    let _ignored: serde::de::IgnoredAny = from_slice(&buf).unwrap();
+
+    // {"a": simple(16), "b": 1}
+    let buf = [0xa2, 0x61, 0x61, 0xf0, 0x61, 0x62, 0x01];
+    let foo: Foo = from_slice(&buf).unwrap();
+    assert_eq!(foo, Foo { b: 1 });
+
+    // simple(16) in two bytes is not well-formed
+    assert!(from_slice::<Value>(&[0xf8, 0x10]).is_err());
+}

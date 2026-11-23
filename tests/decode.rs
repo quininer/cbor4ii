@@ -488,3 +488,31 @@ fn test_inf_string_regression_issue60() {
         Ok(Value::Array(vec![Value::Bytes(vec![1]), Value::Bytes(vec![2])]))
     );
 }
+
+#[test]
+fn test_regression_unassigned_simple() {
+    // simple(0), simple(19), simple(32), simple(255)
+    for (input, n) in [(&[0xe0][..], 0), (&[0xf3], 19), (&[0xf8, 0x20], 32), (&[0xf8, 0xff], 255)] {
+        let value = Value::decode(&mut SliceReader::new(input)).unwrap();
+        assert_eq!(value, Value::Simple(n));
+
+        let mut buf = BufWriter::new(Vec::new());
+        value.encode(&mut buf).unwrap();
+        assert_eq!(buf.buffer(), input);
+
+        let _ignored = dec::IgnoredAny::decode(&mut SliceReader::new(input)).unwrap();
+    }
+
+    // [1, simple(0)]
+    let input = [0x82, 0x01, 0xe0];
+    let value = Value::decode(&mut SliceReader::new(&input)).unwrap();
+    assert_eq!(value, Value::Array(vec![Value::Integer(1), Value::Simple(0)]));
+    let _ignored = dec::IgnoredAny::decode(&mut SliceReader::new(&input)).unwrap();
+
+    // simple(0) to simple(31) in two bytes are not well-formed
+    for input in [&[0xf8, 0x00][..], &[0xf8, 0x13], &[0xf8, 0x1f]] {
+        assert!(types::Simple::decode(&mut SliceReader::new(input)).is_err());
+        assert!(Value::decode(&mut SliceReader::new(input)).is_err());
+        assert!(dec::IgnoredAny::decode(&mut SliceReader::new(input)).is_err());
+    }
+}
